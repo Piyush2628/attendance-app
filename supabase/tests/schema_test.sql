@@ -11,6 +11,9 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000b', 'b@example.com');
 select pg_temp.check((select count(*) = 2 from owner_settings), 'owner_settings auto-created');
 update owner_settings set kiosk_code = 'SHOPA12345' where owner_id = '00000000-0000-0000-0000-00000000000a';
+-- The early tests use an 8-hour day (09:00 to 17:00) with no off days; 05 tests change both.
+update owner_settings set work_start = '09:00', work_end = '17:00', off_days = '{}'
+ where owner_id = '00000000-0000-0000-0000-00000000000a';
 
 -- ---- Owner A -----------------------------------------------------------------
 set role authenticated;
@@ -194,5 +197,145 @@ select pg_temp.check((select clock_out is not null and clock_out_lat is null and
                         and clock_in_lat is not null), 'no location stored when none sent');
 select pg_temp.check(not exists (select 1 from pg_proc where proname in ('kiosk_punch', 'worker_punch', 'do_punch') and pronargs < 4),
                      'old punch functions dropped');
+
+-- ---- Timings, off days, selfies (05_timings_selfies.sql) ----------------------
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+do $$ begin
+  update owner_settings set work_start = '10:30', work_end = null;
+  raise exception 'FAILED: start without end accepted';
+exception when check_violation then raise notice 'ok - timing needs both start and end';
+end $$;
+update owner_settings set work_start = '10:30', work_end = '19:30', off_days = '{0}';
+insert into workers (id, name, wage_type, daily_rate, ot_rate_per_hour) values
+  ('11111111-0000-0000-0000-000000000005', 'Anil (business timing)', 'daily', 900, 100);
+insert into workers (id, name, wage_type, daily_rate, ot_rate_per_hour, work_start, work_end) values
+  ('11111111-0000-0000-0000-000000000006', 'Priya (part time)', 'daily', 400, 0, '14:00', '18:00'),
+  ('11111111-0000-0000-0000-000000000008', 'Mohan (night)', 'daily', 800, 0, '22:00', '06:00');
+insert into workers (id, name, wage_type, monthly_salary, ot_rate_per_hour) values
+  ('11111111-0000-0000-0000-000000000007', 'Kavita (monthly)', 'monthly', 26000, 0);
+select pg_temp.check((select work_start = '14:00' and work_end = '18:00' from workers
+                      where id = '11111111-0000-0000-0000-000000000006'), 'owner sets an employee timing');
+
+-- Business timing 10:30 to 19:30 (9 h)
+insert into attendance_logs (worker_id, clock_in, clock_out) values
+  ('11111111-0000-0000-0000-000000000005', '2026-09-07 10:45+05:30', '2026-09-07 19:30+05:30'), -- 8h45, 15 late
+  ('11111111-0000-0000-0000-000000000005', '2026-09-08 10:30+05:30', '2026-09-08 15:00+05:30'), -- 4h30
+  ('11111111-0000-0000-0000-000000000005', '2026-09-09 10:30+05:30', '2026-09-09 21:30+05:30'), -- 11h
+  ('11111111-0000-0000-0000-000000000005', '2026-09-10 10:30+05:30', '2026-09-10 14:00+05:30'), -- 3h30
+  ('11111111-0000-0000-0000-000000000005', '2026-09-11 10:00+05:30', '2026-09-11 19:30+05:30'); -- early
+select pg_temp.check((select status = 'present' and late_minutes = 15 and ot_minutes = 0 from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-07'),
+                     'business timing: 8h45 of 9h is present, 15 min late');
+select pg_temp.check((select status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-08'),
+                     'business timing: 4h30 is half day');
+select pg_temp.check((select status = 'present' and ot_minutes = 120 and late_minutes = 0 from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-09'),
+                     'business timing: 11h gives 2h overtime');
+select pg_temp.check((select status = 'absent' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-10'),
+                     'business timing: 3h30 is absent');
+select pg_temp.check((select late_minutes = 0 from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-11'),
+                     'early arrival is not late');
+
+-- Employee timing wins over the business timing (part time 14:00 to 18:00)
+insert into attendance_logs (worker_id, clock_in, clock_out) values
+  ('11111111-0000-0000-0000-000000000006', '2026-09-07 14:00+05:30', '2026-09-07 18:00+05:30'),
+  ('11111111-0000-0000-0000-000000000006', '2026-09-08 14:00+05:30', '2026-09-08 16:00+05:30');
+select pg_temp.check((select status = 'present' and ot_minutes = 0 and late_minutes = 0 from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000006' and date = '2026-09-07'),
+                     'part timer: 4h of 4h is present, no overtime');
+select pg_temp.check((select status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000006' and date = '2026-09-08'),
+                     'part timer: 2h is half day');
+
+-- Night timing 22:00 to 06:00 wraps past midnight
+insert into attendance_logs (worker_id, clock_in, clock_out) values
+  ('11111111-0000-0000-0000-000000000008', '2026-09-07 21:50+05:30', '2026-09-08 06:00+05:30'),
+  ('11111111-0000-0000-0000-000000000008', '2026-09-09 01:00+05:30', '2026-09-09 06:00+05:30');
+select pg_temp.check((select status = 'present' and ot_minutes = 10 and late_minutes = 0 from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000008' and date = '2026-09-07'),
+                     'night timing: 8h10 is present with 10 min overtime');
+select pg_temp.check((select late_minutes = 180 and status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000008' and date = '2026-09-09'),
+                     'night timing: in at 01:00 is 3h late');
+
+-- Off days: Sunday 2026-09-06 is recorded but not paid.
+-- Sep 2026 has 4 Sundays, so 26 working days: 26000 a month = 1000 a day.
+insert into attendance_logs (worker_id, clock_in, clock_out) values
+  ('11111111-0000-0000-0000-000000000007', '2026-09-06 10:30+05:30', '2026-09-06 14:00+05:30'),
+  ('11111111-0000-0000-0000-000000000007', '2026-09-07 10:30+05:30', '2026-09-07 19:30+05:30'),
+  ('11111111-0000-0000-0000-000000000005', '2026-09-06 10:30+05:30', '2026-09-06 19:30+05:30');
+select pg_temp.check((select count(*) = 1 from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000007' and date = '2026-09-06'),
+                     'Sunday punch is still recorded');
+select pg_temp.check((select base_pay = 1000 and days_present = 1 and half_days = 0
+                      from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Kavita%'),
+                     'monthly pay over working days, Sunday left out');
+-- Anil: Mon 900 + Tue half 450 + Wed 900 (2h OT = 200) + Fri 900 (30 min OT = 50); Sunday unpaid
+select pg_temp.check((select base_pay = 3150 and ot_pay = 250 and days_present = 3 and half_days = 1 and absent_days = 1
+                      from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Anil%'),
+                     'daily pay leaves out Sunday');
+update owner_settings set off_days = '{}';
+select pg_temp.check((select base_pay = 4050 from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Anil%'),
+                     'with no off days, Sunday is paid');
+update owner_settings set off_days = '{0}';
+
+-- No timing at all: a day clocked in and out is present, with no overtime
+update owner_settings set work_start = null, work_end = null;
+insert into attendance_logs (worker_id, clock_in, clock_out) values
+  ('11111111-0000-0000-0000-000000000005', '2026-09-14 11:00+05:30', '2026-09-14 13:00+05:30');
+select pg_temp.check((select status = 'present' and ot_minutes = 0 and late_minutes is null from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-14'),
+                     'no timing: any punched day is present, no overtime');
+select pg_temp.check((select status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000006' and date = '2026-09-08'),
+                     'no business timing: part timer keeps own timing');
+update owner_settings set work_start = '10:30', work_end = '19:30';
+
+-- Selfies
+select set_worker_pin('11111111-0000-0000-0000-000000000005', '2468');
+update owner_settings set selfie_required = true;
+reset role;
+-- An old selfie on an old punch, to be cleaned up by the next punch.
+insert into punch_selfies (log_id, kind, image, taken_at)
+  select id, 'in', 'data:image/jpeg;base64,OLD', now() - interval '46 days' from attendance_logs
+   where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-07';
+set role anon;
+select pg_temp.check((kiosk_list_workers('SHOPA12345')->>'selfie_required')::boolean, 'kiosk list says selfie is on');
+select pg_temp.check((kiosk_verify_pin('SHOPA12345', '11111111-0000-0000-0000-000000000005', '2468')->>'selfie_required')::boolean,
+                     'worker summary says selfie is on');
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000005', '2468')->>'error') = 'selfie_needed',
+                     'punch without selfie refused');
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000005', '2468', null, null, null,
+                                  'data:image/png;base64,AAAA')->>'error') = 'selfie_needed',
+                     'non-JPEG selfie refused');
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000005', '2468', null, null, null,
+                                  'data:image/jpeg;base64,SU4=')->>'action') = 'clock_in', 'punch with selfie clocks in');
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000005', '2468', null, null, null,
+                                  'data:image/jpeg;base64,T1VU')->>'action') = 'clock_out', 'punch with selfie clocks out');
+reset role;
+select pg_temp.check((select count(*) = 2 from punch_selfies s join attendance_logs l on l.id = s.log_id
+                      where l.worker_id = '11111111-0000-0000-0000-000000000005' and l.clock_out is not null
+                        and l.date = (now() at time zone 'Asia/Kolkata')::date),
+                     'clock-in and clock-out selfies stored');
+select pg_temp.check(not exists (select 1 from punch_selfies where image = 'data:image/jpeg;base64,OLD'),
+                     'selfies older than 45 days deleted');
+set role authenticated;
+select pg_temp.check((select count(*) = 2 from punch_selfies), 'owner sees own selfies');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select pg_temp.check((select count(*) = 0 from punch_selfies), 'B sees no selfies of A');
+reset role;
+set role anon;
+do $$ begin
+  perform 1 from punch_selfies;
+  raise exception 'FAILED: anon read selfies';
+exception when insufficient_privilege then raise notice 'ok - anon cannot read selfies';
+end $$;
+reset role;
+select pg_temp.check(not exists (select 1 from pg_proc where proname in ('kiosk_punch', 'worker_punch', 'do_punch') and pronargs < 5),
+                     'punch functions without selfie dropped');
 
 \echo ALL TESTS PASSED

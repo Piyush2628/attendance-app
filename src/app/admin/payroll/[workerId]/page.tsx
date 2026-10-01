@@ -8,6 +8,7 @@ import { requireOwner } from "@/lib/admin/data";
 import { formatHours, getPayroll, WAGE_LABEL, WAGE_LABEL_HI } from "@/lib/admin/payroll";
 import { parsePeriod, periodQuery } from "@/lib/admin/period";
 import { formatMinutes, formatMoney } from "@/lib/format";
+import { effectiveTiming, isOffDay, offDaysLabel, timingLabel } from "@/lib/timing";
 import { cn } from "@/lib/utils";
 import type { AttendanceStatus, PayrollRow } from "@/types/database";
 
@@ -31,7 +32,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
   const [worker, logs, payroll] = await Promise.all([
     supabase
       .from("workers")
-      .select("id, name, phone, wage_type, daily_rate, hourly_rate, monthly_salary, standard_shift_hours, ot_rate_per_hour")
+      .select("id, name, phone, wage_type, daily_rate, hourly_rate, monthly_salary, ot_rate_per_hour, work_start, work_end")
       .eq("id", workerId)
       .maybeSingle(),
     supabase
@@ -79,6 +80,8 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
     );
 
   const paidDays = p.days_present + p.half_days / 2;
+  const timing = timingLabel(effectiveTiming(w, settings));
+  const isOff = (d: string) => isOffDay(d, settings.off_days);
   const otRate = Number(w.ot_rate_per_hour) || (w.wage_type === "hourly" ? Number(w.hourly_rate) : 0);
   const rateText = {
     daily: `${money(w.daily_rate)} / day`,
@@ -140,7 +143,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
           <Field label="Employee" value={<span className="text-base font-semibold">{w.name}</span>} />
           <Field label="Phone" value={w.phone ?? "—"} />
           <Field label={`Pay type · ${WAGE_LABEL_HI[w.wage_type]}`} value={`${WAGE_LABEL[w.wage_type]} · ${rateText}`} />
-          <Field label="Shift" value={`${formatHours(Number(w.standard_shift_hours))} h · OT ${money(otRate)} / h`} />
+          <Field label="Timing" value={`${timing ?? "No fixed timing"} · OT ${money(otRate)} / h`} />
         </section>
 
         <section className="grid grid-cols-3 gap-2 text-center sm:grid-cols-5">
@@ -195,8 +198,9 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
               <tbody className="divide-y divide-neutral-200">
                 {logs.data.map((l) => {
                   const open = !l.manual_override && l.clock_in && !l.clock_out;
+                  const off = isOff(l.date);
                   return (
-                    <tr key={l.id} className="break-inside-avoid">
+                    <tr key={l.id} className={cn("break-inside-avoid", off && "text-neutral-500")}>
                       <td className="py-1 whitespace-nowrap">{day(l.date)}</td>
                       <td className="py-1 whitespace-nowrap">{l.manual_override && !l.clock_in ? "—" : time(l.clock_in)}</td>
                       <td className="py-1 whitespace-nowrap">{time(l.clock_out)}</td>
@@ -206,8 +210,13 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
                       <td className="hidden py-1 text-right tabular-nums sm:table-cell print:table-cell">
                         {l.ot_minutes ? formatMinutes(l.ot_minutes) : "—"}
                       </td>
-                      <td className={cn("py-1 text-right font-medium", open ? "text-neutral-500" : STATUS[l.status].className)}>
-                        {open ? "Still in" : STATUS[l.status].label}
+                      <td
+                        className={cn(
+                          "py-1 text-right font-medium",
+                          open || off ? "text-neutral-500" : STATUS[l.status].className,
+                        )}
+                      >
+                        {open ? "Still in" : off ? "Off day" : STATUS[l.status].label}
                         {l.manual_override && <span className="text-neutral-500"> *</span>}
                       </td>
                     </tr>
@@ -218,6 +227,11 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
           )}
           {logs.data.some((l) => l.manual_override) && (
             <p className="pt-1 text-xs text-neutral-500">* Marked by owner</p>
+          )}
+          {logs.data.some((l) => isOff(l.date)) && (
+            <p className="pt-1 text-xs text-neutral-500">
+              Off days ({offDaysLabel(settings.off_days)}) are shown but not counted in the salary.
+            </p>
           )}
         </section>
 

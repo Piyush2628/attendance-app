@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, Clock, LogOut, MapPin, Minus, Undo2, X } from "lucide-react";
 
 import { clearTodayMark, clockOutNow, markToday } from "@/app/admin/actions";
+import { LateTag, SelfieThumbs } from "@/components/attendance/punch-tags";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { WorkerAvatar } from "@/components/worker-avatar";
@@ -138,7 +139,8 @@ function PunchPlace({
 function BoardItem({ row, now, timeZone, radiusM }: { row: BoardRow; now: number; timeZone: string; radiusM: number }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const { worker, log, openLog, state } = row;
+  const { worker, log, openLog, state, selfies } = row;
+  const shown = state === "in" ? openLog : log;
 
   const run = (fn: () => Promise<{ error?: string }>) =>
     startTransition(async () => {
@@ -189,12 +191,13 @@ function BoardItem({ row, now, timeZone, radiusM }: { row: BoardRow; now: number
             aria-hidden
           />
         </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <Link href={`/admin/attendance?e=${worker.id}`} className="truncate font-semibold underline-offset-2 hover:underline">
               {worker.name}
             </Link>
             {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
+            <LateTag minutes={shown?.late_minutes} />
           </div>
           <div className="text-sm">{detail}</div>
           {(() => {
@@ -221,6 +224,7 @@ function BoardItem({ row, now, timeZone, radiusM }: { row: BoardRow; now: number
           })()}
           {error && <div className="text-destructive text-xs">{error}</div>}
         </div>
+        <SelfieThumbs selfies={selfies} name={worker.name} />
       </div>
 
       <div className="flex flex-wrap gap-2 sm:justify-end">

@@ -12,7 +12,8 @@ import {
   setKioskCode,
   setWorkerToken,
 } from "@/lib/worker-session";
-import type { GeoFix, KioskWorkerList, LoginResult, PunchError, PunchResult, WorkerSummary } from "@/types/database";
+import type { PunchExtras } from "@/components/punch/punch-with-checks";
+import type { KioskWorkerList, LoginResult, PunchError, PunchResult, WorkerSummary } from "@/types/database";
 
 const noCode: PunchError = { ok: false, error: "invalid_code" };
 const noSession: PunchError = { ok: false, error: "invalid_session" };
@@ -23,10 +24,15 @@ async function rpc<T>(fn: Parameters<ReturnType<typeof createAnonClient>["rpc"]>
   return data as T;
 }
 
-/** Location args for the punch RPCs; the database ignores anything that isn't a real coordinate. */
-function locationArgs(fix: GeoFix | null | undefined) {
+/**
+ * Location and selfie args for the punch RPCs. The database ignores anything
+ * that isn't a real coordinate or a small JPEG data URL.
+ */
+function punchArgs(extras: PunchExtras | undefined) {
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-  return { p_lat: num(fix?.lat), p_lng: num(fix?.lng), p_accuracy: num(fix?.accuracy) };
+  const fix = extras?.fix;
+  const selfie = typeof extras?.selfie === "string" && extras.selfie.length <= 200_000 ? extras.selfie : null;
+  return { p_lat: num(fix?.lat), p_lng: num(fix?.lng), p_accuracy: num(fix?.accuracy), p_selfie: selfie };
 }
 
 // ---- Kiosk (shared tablet) ---------------------------------------------------
@@ -43,10 +49,10 @@ export async function kioskVerify(workerId: string, pin: string): Promise<Worker
   return rpc("kiosk_verify_pin", { p_kiosk_code: code, p_worker_id: workerId, p_pin: pin });
 }
 
-export async function kioskPunch(workerId: string, pin: string, fix?: GeoFix | null): Promise<PunchResult> {
+export async function kioskPunch(workerId: string, pin: string, extras?: PunchExtras): Promise<PunchResult> {
   const code = await getKioskCode();
   if (!code) return noCode;
-  return rpc("kiosk_punch", { p_kiosk_code: code, p_worker_id: workerId, p_pin: pin, ...locationArgs(fix) });
+  return rpc("kiosk_punch", { p_kiosk_code: code, p_worker_id: workerId, p_pin: pin, ...punchArgs(extras) });
 }
 
 // ---- Business code -----------------------------------------------------------
@@ -81,10 +87,10 @@ export async function workerLogin(phone: string, pin: string): Promise<LoginResu
   return result.ok ? { ...result, token: "" } : result;
 }
 
-export async function workerPunch(fix?: GeoFix | null): Promise<PunchResult> {
+export async function workerPunch(extras?: PunchExtras): Promise<PunchResult> {
   const token = await getWorkerToken();
   if (!token) return noSession;
-  return rpc("worker_punch", { p_token: token, ...locationArgs(fix) });
+  return rpc("worker_punch", { p_token: token, ...punchArgs(extras) });
 }
 
 export async function workerStatus(): Promise<WorkerSummary | PunchError> {

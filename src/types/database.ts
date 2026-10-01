@@ -1,4 +1,4 @@
-// Hand-written to match supabase/migrations/01_schema.sql.
+// Hand-written to match supabase/migrations/ (01 to 05).
 // Once a Supabase project exists, regenerate with:
 //   npx supabase gen types typescript --project-id <id> > src/types/database.ts
 // (then re-add the RPC result types at the bottom of this file).
@@ -26,6 +26,12 @@ export type Database = {
           work_lng: number | null;
           work_radius_m: number;
           gps_required: boolean;
+          /** "10:30:00", or null when the business has no fixed timing. */
+          work_start: string | null;
+          work_end: string | null;
+          /** Weekdays left out of salary, 0 = Sunday. */
+          off_days: number[];
+          selfie_required: boolean;
         };
         Insert: never;
         Update: {
@@ -36,6 +42,10 @@ export type Database = {
           work_lng?: number | null;
           work_radius_m?: number;
           gps_required?: boolean;
+          work_start?: string | null;
+          work_end?: string | null;
+          off_days?: number[];
+          selfie_required?: boolean;
         };
         Relationships: [];
       };
@@ -55,6 +65,9 @@ export type Database = {
           ot_rate_per_hour: number;
           is_active: boolean;
           created_at: string;
+          /** Own timing (part time); null = use the business timing. */
+          work_start: string | null;
+          work_end: string | null;
         };
         Insert: {
           id?: string;
@@ -68,6 +81,8 @@ export type Database = {
           standard_shift_hours?: number;
           ot_rate_per_hour?: number;
           is_active?: boolean;
+          work_start?: string | null;
+          work_end?: string | null;
         };
         Update: {
           name?: string;
@@ -80,6 +95,8 @@ export type Database = {
           standard_shift_hours?: number;
           ot_rate_per_hour?: number;
           is_active?: boolean;
+          work_start?: string | null;
+          work_end?: string | null;
         };
         Relationships: [];
       };
@@ -105,6 +122,8 @@ export type Database = {
           clock_out_lng: number | null;
           clock_out_accuracy_m: number | null;
           clock_out_distance_m: number | null;
+          /** Minutes after the start time; null when there is no timing. */
+          late_minutes: number | null;
         };
         Insert: {
           id?: string;
@@ -167,6 +186,27 @@ export type Database = {
           },
         ];
       };
+      punch_selfies: {
+        Row: {
+          id: string;
+          log_id: string;
+          kind: "in" | "out";
+          /** data:image/jpeg;base64,… */
+          image: string;
+          taken_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "punch_selfies_log_id_fkey";
+            columns: ["log_id"];
+            isOneToOne: false;
+            referencedRelation: "attendance_logs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -219,8 +259,13 @@ export type OwnerSettings = Database["public"]["Tables"]["owner_settings"]["Row"
 
 // ---- RPC result shapes (jsonb functions) -------------------------------------
 
-/** Device location sent with a punch (04_gps.sql). All null when not sent. */
-type PunchLocationArgs = { p_lat?: number | null; p_lng?: number | null; p_accuracy?: number | null };
+/** Device location (04_gps.sql) and selfie (05) sent with a punch. All null when not sent. */
+type PunchLocationArgs = {
+  p_lat?: number | null;
+  p_lng?: number | null;
+  p_accuracy?: number | null;
+  p_selfie?: string | null;
+};
 
 /** A browser geolocation fix. */
 export type GeoFix = { lat: number; lng: number; accuracy: number };
@@ -254,11 +299,16 @@ export type PunchErrorCode =
   | "location_needed"
   | "outside_area"
   | "location_weak"
+  // Selfie at punch (05_timings_selfies.sql)
+  | "selfie_needed"
   // Client-side only: the request never reached the server (no internet).
   | "offline"
   // Client-side only: the browser would not give a location.
   | "location_denied"
-  | "location_unavailable";
+  | "location_unavailable"
+  // Client-side only: the camera could not be used.
+  | "camera_denied"
+  | "camera_unavailable";
 
 export type PunchError = {
   ok: false;
@@ -276,6 +326,8 @@ export type WorkerSummary = {
   worker: { id: string; name: string; photo_url: string | null; standard_shift_hours: number };
   /** The owner turned on the GPS check: send a location with every punch. */
   gps_required: boolean;
+  /** The owner turned on selfies: send a photo with every punch. */
+  selfie_required: boolean;
   clocked_in: boolean;
   clock_in_at: string | null;
   today_minutes: number;
@@ -295,6 +347,7 @@ export type KioskWorkerList =
       ok: true;
       business_name: string;
       gps_required: boolean;
+      selfie_required: boolean;
       workers: { id: string; name: string; photo_url: string | null; clocked_in: boolean }[];
     }
   | PunchError;

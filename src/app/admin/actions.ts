@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireOwner } from "@/lib/admin/data";
 import { parseCoordinates } from "@/lib/geo";
+import { readTimingPair } from "@/lib/timing";
 import type { AttendanceStatus } from "@/types/database";
 
 const STATUSES: AttendanceStatus[] = ["present", "half_day", "absent"];
@@ -78,5 +79,40 @@ export async function saveWorkLocation(_prev: WorkLocationState, formData: FormD
   if (error) return { error: error.message };
 
   revalidatePath("/admin");
+  return { ok: true, savedAt: Date.now() };
+}
+
+export type SettingsState = { ok?: boolean; error?: string; savedAt?: number };
+
+/** Optional business work timing and the off days left out of salary (05_timings_selfies.sql). */
+export async function saveWorkTimings(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
+  const timing = readTimingPair(formData);
+  if ("error" in timing) return { error: timing.error };
+  const offDays = formData
+    .getAll("off_days")
+    .map(Number)
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+
+  const { supabase, settings } = await requireOwner();
+  const { error } = await supabase
+    .from("owner_settings")
+    .update({ ...timing, off_days: [...new Set(offDays)].sort() })
+    .eq("owner_id", settings.owner_id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin", "layout");
+  return { ok: true, savedAt: Date.now() };
+}
+
+/** Turn the selfie-at-punch requirement on or off. */
+export async function saveSelfieRequired(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
+  const { supabase, settings } = await requireOwner();
+  const { error } = await supabase
+    .from("owner_settings")
+    .update({ selfie_required: formData.get("selfie_required") === "on" })
+    .eq("owner_id", settings.owner_id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin", "layout");
   return { ok: true, savedAt: Date.now() };
 }

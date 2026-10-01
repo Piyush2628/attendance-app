@@ -7,7 +7,8 @@ import { ArrowLeft, Smartphone } from "lucide-react";
 import { kioskPunch, kioskVerify, listKioskWorkers } from "@/app/punch/actions";
 import { errorMessage, OFFLINE_ERROR } from "@/components/punch/messages";
 import { PinPad } from "@/components/punch/pin-pad";
-import { punchWithLocation } from "@/components/punch/punch-with-location";
+import { punchWithChecks } from "@/components/punch/punch-with-checks";
+import { useSelfieCamera } from "@/components/punch/selfie-camera";
 import { SuccessScreen } from "@/components/punch/success-screen";
 import { WorkerPanel } from "@/components/punch/worker-panel";
 import { InstallButton } from "@/components/pwa/install-button";
@@ -38,6 +39,7 @@ export function KioskApp({
   initialWorkers: KioskWorker[];
   gpsRequired: boolean;
 }) {
+  const { takeSelfie, camera, cameraOpen } = useSelfieCamera();
   const [workers, setWorkers] = useState(initialWorkers);
   const [step, setStep] = useState<Step>({ kind: "grid" });
   const [busy, setBusy] = useState<false | "punch" | "location">(false);
@@ -74,9 +76,12 @@ export function KioskApp({
   useEffect(() => {
     clearTimeout(idle.current);
     // Paused while a punch is in flight (finding the location can take a few seconds).
-    if ((step.kind === "pin" || step.kind === "panel") && !busy) idle.current = setTimeout(backToGrid, IDLE_MS);
+    // Also paused while the selfie camera is open.
+    if ((step.kind === "pin" || step.kind === "panel") && !busy && !cameraOpen) {
+      idle.current = setTimeout(backToGrid, IDLE_MS);
+    }
     return () => clearTimeout(idle.current);
-  }, [step, errorKey, busy, backToGrid]);
+  }, [step, errorKey, busy, cameraOpen, backToGrid]);
 
   async function onPin(worker: KioskWorker, pin: string) {
     setBusy("punch");
@@ -96,15 +101,18 @@ export function KioskApp({
     }
   }
 
-  async function onPunch(worker: KioskWorker, pin: string, needsLocation: boolean) {
+  async function onPunch(worker: KioskWorker, pin: string, summary: WorkerSummary) {
     setError(null);
     try {
-      const res = await punchWithLocation(
-        needsLocation,
-        (fix) => kioskPunch(worker.id, pin, fix),
-        () => setBusy("location"),
-        () => setBusy("punch"),
-      );
+      const res = await punchWithChecks({
+        needsLocation: summary.gps_required,
+        needsSelfie: summary.selfie_required,
+        takeSelfie,
+        punch: (extras) => kioskPunch(worker.id, pin, extras),
+        onLocating: () => setBusy("location"),
+        onSaving: () => setBusy("punch"),
+      });
+      if (!res) return; // camera cancelled
       if (res.ok) {
         setStep({ kind: "done", name: worker.name, action: res.action, at: res.at, totalMinutes: res.total_minutes });
         setWorkers((ws) => ws.map((w) => (w.id === worker.id ? { ...w, clocked_in: res.action === "clock_in" } : w)));
@@ -141,11 +149,12 @@ export function KioskApp({
             <WorkerPanel
               summary={step.summary}
               busy={busy}
-              onPunch={() => onPunch(worker, step.pin, step.summary.gps_required)}
+              onPunch={() => onPunch(worker, step.pin, step.summary)}
             />
           )}
           {error && <ErrorBox error={error} />}
         </div>
+        {camera}
       </div>
     );
   }

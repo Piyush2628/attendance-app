@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, FileText } from "lucide-react";
 
+import { EditDayDialog } from "@/components/attendance/edit-day-dialog";
 import { EmployeePicker } from "@/components/attendance/employee-picker";
+import { LateTag, SelfieThumbs } from "@/components/attendance/punch-tags";
 import { Button } from "@/components/ui/button";
-import { requireOwner } from "@/lib/admin/data";
+import { getSelfieIds, requireOwner, type SelfieIds } from "@/lib/admin/data";
 import { daysBetween, isIsoDate, monthName, rangeFor, shortDay, VIEWS, weekday, type View } from "@/lib/admin/calendar";
 import { formatMinutes } from "@/lib/format";
+import { isOffDay, offDaysLabel } from "@/lib/timing";
 import { cn } from "@/lib/utils";
 import type { AttendanceLog, AttendanceStatus } from "@/types/database";
 
@@ -15,7 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Log = Pick<
   AttendanceLog,
-  "id" | "date" | "clock_in" | "clock_out" | "total_minutes" | "status" | "ot_minutes" | "manual_override"
+  "id" | "date" | "clock_in" | "clock_out" | "total_minutes" | "status" | "ot_minutes" | "manual_override" | "late_minutes" | "notes"
 >;
 
 type DayState = AttendanceStatus | "open";
@@ -57,7 +60,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
 
   const logsRes = await supabase
     .from("attendance_logs")
-    .select("id, date, clock_in, clock_out, total_minutes, status, ot_minutes, manual_override")
+    .select("id, date, clock_in, clock_out, total_minutes, status, ot_minutes, manual_override, late_minutes, notes")
     .eq("worker_id", selectedId)
     .gte("date", range.from)
     .lte("date", range.to)
@@ -65,8 +68,15 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
   if (logsRes.error) throw logsRes.error;
   const logs: Log[] = logsRes.data;
   const byDate = new Map(logs.map((l) => [l.date, l]));
+  // The year view shows counts only, so it doesn't need the photos.
+  const selfies = view === "year" ? new Map<string, SelfieIds>() : await getSelfieIds(supabase, logs.map((l) => l.id));
+  const workerName = workers.data.find((w) => w.id === selectedId)?.name ?? "";
 
-  const done = logs.filter((l) => dayState(l) !== "open");
+  // Totals match the salary: off days are recorded but not counted.
+  const offDays = settings.off_days;
+  const isOff = (d: string) => isOffDay(d, offDays);
+  const done = logs.filter((l) => dayState(l) !== "open" && !isOff(l.date));
+  const offDayWork = logs.filter((l) => dayState(l) !== "open" && isOff(l.date) && l.status !== "absent").length;
   const totals = {
     present: done.filter((l) => l.status === "present").length,
     half: done.filter((l) => l.status === "half_day").length,
@@ -135,22 +145,45 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
         <Stat label="Hours" value={formatMinutes(totals.minutes)} className="bg-muted" />
         <Stat label="Overtime" value={formatMinutes(totals.ot)} className="bg-muted" />
       </div>
+      {offDayWork > 0 && (
+        <p className="text-muted-foreground -mt-2 text-sm" data-testid="off-day-work">
+          Also came in on {offDayWork} off {offDayWork === 1 ? "day" : "days"} ({offDaysLabel(offDays)}), not counted in
+          the salary.
+        </p>
+      )}
 
-      {view === "month" && <MonthGrid from={range.from} to={range.to} today={today} byDate={byDate} />}
+      {view === "month" && <MonthGrid from={range.from} to={range.to} today={today} byDate={byDate} isOff={isOff} />}
+
+      {view !== "year" && (
+        <div className="-mb-2 flex items-center justify-between">
+          <h2 className="font-semibold">Days</h2>
+          <EditDayDialog
+            workerId={selectedId}
+            workerName={workerName}
+            timeZone={settings.timezone}
+            today={today}
+            date={range.to < today ? range.to : today}
+          />
+        </div>
+      )}
 
       {view === "year" ? (
-        <YearTable year={range.from.slice(0, 4)} logs={logs} monthHref={(m) => href("month", m)} />
+        <YearTable year={range.from.slice(0, 4)} logs={logs.filter((l) => !isOff(l.date))} monthHref={(m) => href("month", m)} />
       ) : (
         <ul className="divide-y rounded-xl border" data-testid="day-list">
           {(view === "week" ? daysBetween(range.from, range.to) : logs.map((l) => l.date)).map((d) => {
             const l = byDate.get(d);
             const st = l ? dayState(l) : null;
+            const off = isOff(d);
             return (
-              <li key={d} className="flex items-center gap-3 px-3 py-2">
-                <div className="w-24 shrink-0 text-sm font-medium">{shortDay(d)}</div>
+              <li key={d} className={cn("flex items-center gap-3 px-3 py-2", off && "bg-muted/40")}>
+                <div className="w-24 shrink-0 text-sm font-medium">
+                  {shortDay(d)}
+                  {off && <div className="text-muted-foreground text-xs font-normal">Off day</div>}
+                </div>
                 <div className="text-muted-foreground min-w-0 flex-1 text-sm">
                   {!l ? (
-                    d > today ? "" : "No record"
+                    d > today || off ? "" : "No record"
                   ) : l.clock_in ? (
                     <>
                       {time(l.clock_in)} – {l.clock_out ? time(l.clock_out) : "…"}
@@ -162,11 +195,31 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
                   ) : (
                     "Marked by you"
                   )}
+                  {l && (
+                    <div className="mt-0.5 flex flex-wrap gap-1 empty:hidden">
+                      <LateTag minutes={l.late_minutes} />
+                      {off && l.status !== "absent" && dayState(l) !== "open" && (
+                        <span className="text-xs">Not paid</span>
+                      )}
+                    </div>
+                  )}
                 </div>
+                {l && <SelfieThumbs selfies={selfies.get(l.id) ?? {}} name={workerName} />}
                 {st && (
-                  <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", STATE[st].cell)}>
+                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold", STATE[st].cell)}>
                     {STATE[st].label}
                   </span>
+                )}
+                {(l || d <= today) && (
+                  <EditDayDialog
+                    workerId={selectedId}
+                    workerName={workerName}
+                    timeZone={settings.timezone}
+                    today={today}
+                    log={l}
+                    date={d}
+                    compact
+                  />
                 )}
               </li>
             );
@@ -197,17 +250,19 @@ function Stat({ label, value, className }: { label: string; value: React.ReactNo
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/** Calendar for one month: a coloured square per day (P / ½ / A). */
+/** Calendar for one month: a coloured square per day (P / ½ / A). Off days are dashed and not paid. */
 function MonthGrid({
   from,
   to,
   today,
   byDate,
+  isOff,
 }: {
   from: string;
   to: string;
   today: string;
   byDate: Map<string, Log>;
+  isOff: (date: string) => boolean;
 }) {
   const lead = (weekday(from) + 6) % 7; // empty cells before the 1st (weeks start Monday)
   return (
@@ -224,19 +279,32 @@ function MonthGrid({
         {daysBetween(from, to).map((d) => {
           const l = byDate.get(d);
           const st = l ? dayState(l) : null;
+          const off = isOff(d);
           return (
             <div
               key={d}
-              title={st ? `${shortDay(d)}: ${STATE[st].label}` : shortDay(d)}
+              title={`${shortDay(d)}${st ? `: ${STATE[st].label}` : ""}${off ? " (off day, not paid)" : ""}`}
               data-state={st ?? "none"}
+              data-off={off || undefined}
               className={cn(
                 "flex aspect-square flex-col items-center justify-center rounded-lg text-sm leading-tight",
-                st ? STATE[st].cell : d > today ? "text-muted-foreground/50" : "bg-muted text-muted-foreground",
+                st
+                  ? STATE[st].cell
+                  : off
+                    ? "text-muted-foreground border border-dashed"
+                    : d > today
+                      ? "text-muted-foreground/50"
+                      : "bg-muted text-muted-foreground",
+                st && off && "opacity-60",
                 d === today && "ring-primary ring-2 ring-offset-1",
               )}
             >
               <span className="font-semibold">{Number(d.slice(8))}</span>
-              {st && <span className="text-[10px] font-bold">{STATE[st].short}</span>}
+              {st ? (
+                <span className="text-[10px] font-bold">{STATE[st].short}</span>
+              ) : (
+                off && <span className="text-[10px]">Off</span>
+              )}
             </div>
           );
         })}

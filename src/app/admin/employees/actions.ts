@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireOwner } from "@/lib/admin/data";
+import { readTimingPair } from "@/lib/timing";
 import type { WageType } from "@/types/database";
 
 export type SaveWorkerState = { ok?: boolean; error?: string; savedAt?: number };
@@ -23,6 +24,9 @@ export async function saveWorker(_prev: SaveWorkerState, formData: FormData): Pr
   const photoUrl = String(formData.get("photo_url") ?? "") || null;
   const pin = String(formData.get("pin") ?? "").trim();
   const wageType = String(formData.get("wage_type") ?? "") as WageType;
+  // Empty or missing = use the business timing.
+  const timing = readTimingPair(formData);
+  if ("error" in timing) return { error: timing.error };
 
   const values = {
     name,
@@ -32,8 +36,8 @@ export async function saveWorker(_prev: SaveWorkerState, formData: FormData): Pr
     daily_rate: num(formData, "daily_rate"),
     hourly_rate: num(formData, "hourly_rate"),
     monthly_salary: num(formData, "monthly_salary"),
-    standard_shift_hours: num(formData, "standard_shift_hours"),
     ot_rate_per_hour: num(formData, "ot_rate_per_hour"),
+    ...timing,
   };
 
   if (!name) return { error: "Enter the employee's name." };
@@ -44,10 +48,7 @@ export async function saveWorker(_prev: SaveWorkerState, formData: FormData): Pr
   }
   const rateKey = { daily: "daily_rate", hourly: "hourly_rate", monthly: "monthly_salary" } as const;
   if (values[rateKey[wageType]] <= 0) return { error: "Enter the wage amount." };
-  if (values.standard_shift_hours <= 0 || values.standard_shift_hours > 24) {
-    return { error: "Shift hours must be between 1 and 24." };
-  }
-  if (!id && !pin) return { error: "Set a 4-digit PIN for the worker." };
+  if (!id && !pin) return { error: "Set a 4-digit PIN for the employee." };
   if (pin && !/^[0-9]{4}$/.test(pin)) return { error: "PIN must be exactly 4 digits." };
 
   const { supabase } = await requireOwner();

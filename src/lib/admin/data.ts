@@ -9,18 +9,23 @@ import type { AttendanceLog, OwnerSettings, Worker } from "@/types/database";
 
 /**
  * Supabase client + the signed-in owner's settings. Redirects to /login if signed out.
- * Cached per request, so the layout and the page share one auth check and one settings read.
+ * Cached per request, so the layout and the page share one settings read.
+ *
+ * One round trip: row-level security returns only the signed-in owner's row
+ * (and nothing when signed out), so the auth check happens only when that
+ * read comes back empty. proxy.ts has already checked the session.
  */
 export const requireOwner = cache(async () => {
   const supabase = await createClient();
-  const { data: claims } = await supabase.auth.getClaims();
-  if (!claims?.claims?.sub) redirect("/login");
-
   const { data: settings } = await supabase
     .from("owner_settings")
     .select("*")
-    .single<OwnerSettings>();
-  if (!settings) throw new Error("Owner settings missing. Was 01_schema.sql applied?");
+    .maybeSingle<OwnerSettings>();
+  if (!settings) {
+    const { data: claims } = await supabase.auth.getClaims();
+    if (!claims?.claims?.sub) redirect("/login");
+    throw new Error("Owner settings missing. Was 01_schema.sql applied?");
+  }
 
   return { supabase, settings, today: isoDate(new Date(), settings.timezone) };
 });
@@ -39,17 +44,14 @@ export type BoardRow = {
 
 export type SelfieIds = { in?: string; out?: string };
 
-/** Selfie ids by attendance log id (no image data; the images load from /admin/selfie/[id]). */
-export async function getSelfieIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  logIds: string[],
-): Promise<Map<string, SelfieIds>> {
-  const byLog = new Map<string, SelfieIds>();
-  if (logIds.length === 0) return byLog;
-  const { data, error } = await supabase.from("punch_selfies").select("id, log_id, kind").in("log_id", logIds);
-  if (error) throw error;
-  for (const s of data) byLog.set(s.log_id, { ...byLog.get(s.log_id), [s.kind]: s.id });
-  return byLog;
+/** Embed this in an attendance_logs select to get the day's selfie ids in the same query. */
+export const SELFIE_IDS = "punch_selfies(id, kind)";
+
+/** Selfie ids of one log, from the embedded punch_selfies rows. */
+export function selfieIds(rows: { id: string; kind: string }[] | null | undefined): SelfieIds {
+  const out: SelfieIds = {};
+  for (const s of rows ?? []) if (s.kind === "in" || s.kind === "out") out[s.kind] = s.id;
+  return out;
 }
 
 const OPEN_WINDOW_MS = 20 * 60 * 60 * 1000; // matches do_punch() in 01_schema.sql
@@ -64,10 +66,10 @@ export async function getTodayBoard() {
       .select("id, name, photo_url, work_start, work_end")
       .eq("is_active", true)
       .order("name"),
-    supabase.from("attendance_logs").select("*").eq("date", today),
+    supabase.from("attendance_logs").select(`*, ${SELFIE_IDS}`).eq("date", today),
     supabase
       .from("attendance_logs")
-      .select("*")
+      .select(`*, ${SELFIE_IDS}`)
       .is("clock_out", null)
       .not("clock_in", "is", null)
       .gt("clock_in", since),
@@ -79,8 +81,6 @@ export async function getTodayBoard() {
   const todayByWorker = new Map(logs.data.map((l) => [l.worker_id, l]));
   const openByWorker = new Map(open.data.map((l) => [l.worker_id, l]));
 
-  const selfies = await getSelfieIds(supabase, [...new Set([...logs.data, ...open.data].map((l) => l.id))]);
-
   const rows: BoardRow[] = workers.data.map((worker) => {
     const log = todayByWorker.get(worker.id) ?? null;
     const openLog = openByWorker.get(worker.id) ?? null;
@@ -89,7 +89,7 @@ export async function getTodayBoard() {
     else if (log?.clock_out) state = "done";
     else if (log?.manual_override) state = "marked";
     const shown = state === "in" ? openLog : log;
-    return { worker, log, openLog, state, selfies: (shown && selfies.get(shown.id)) ?? {} };
+    return { worker, log, openLog, state, selfies: selfieIds(shown?.punch_selfies) };
   });
 
   return { settings, today, rows };

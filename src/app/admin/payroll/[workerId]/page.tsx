@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MessageCircle } from "lucide-react";
 
+import { EditDayDialog } from "@/components/attendance/edit-day-dialog";
 import { PrintButton } from "@/components/payroll/print-button";
 import { Button } from "@/components/ui/button";
 import { requireOwner } from "@/lib/admin/data";
@@ -37,7 +38,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
       .maybeSingle(),
     supabase
       .from("attendance_logs")
-      .select("id, date, clock_in, clock_out, total_minutes, status, ot_minutes, manual_override")
+      .select("id, date, clock_in, clock_out, total_minutes, status, ot_minutes, manual_override, notes")
       .eq("worker_id", workerId)
       .gte("date", period.from)
       .lte("date", period.to)
@@ -180,7 +181,18 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
         </section>
 
         <section>
-          <h2 className="pb-1 text-sm font-semibold">Daily attendance · रोज़ की हाज़िरी</h2>
+          <div className="flex items-center justify-between gap-2 pb-1">
+            <h2 className="text-sm font-semibold">Daily attendance · रोज़ की हाज़िरी</h2>
+            <div className="no-print">
+              <EditDayDialog
+                workerId={w.id}
+                workerName={w.name}
+                timeZone={tz}
+                today={today}
+                date={period.to < today ? period.to : today}
+              />
+            </div>
+          </div>
           {logs.data.length === 0 ? (
             <p className="text-sm text-neutral-600">No attendance recorded in this period.</p>
           ) : (
@@ -193,6 +205,9 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
                   <th className="py-1 text-right font-medium">Hours</th>
                   <th className="hidden py-1 text-right font-medium sm:table-cell print:table-cell">OT</th>
                   <th className="py-1 text-right font-medium">Status</th>
+                  <th className="no-print w-8 py-1">
+                    <span className="sr-only">Edit</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -218,6 +233,16 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
                       >
                         {open ? "Still in" : off ? "Off day" : STATUS[l.status].label}
                         {l.manual_override && <span className="text-neutral-500"> *</span>}
+                      </td>
+                      <td className="no-print py-0.5 text-right">
+                        <EditDayDialog
+                          workerId={w.id}
+                          workerName={w.name}
+                          timeZone={tz}
+                          today={today}
+                          log={l}
+                          compact
+                        />
                       </td>
                     </tr>
                   );

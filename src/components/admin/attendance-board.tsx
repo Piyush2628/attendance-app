@@ -3,9 +3,10 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Clock, LogOut, MapPin, Minus, Undo2, X } from "lucide-react";
+import { Check, Clock, LogOut, MapPin, Minus, Trash2, Undo2, X } from "lucide-react";
 
 import { clearTodayMark, clockOutNow, markToday } from "@/app/admin/actions";
+import { deleteDay } from "@/app/admin/attendance/actions";
 import { LateTag, SelfieThumbs } from "@/components/attendance/punch-tags";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -193,7 +194,7 @@ function BoardItem({ row, now, timeZone, radiusM }: { row: BoardRow; now: number
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Link href={`/admin/attendance?e=${worker.id}`} className="truncate font-semibold underline-offset-2 hover:underline">
+            <Link href={`/admin/attendance?e=${worker.id}`} prefetch={false} className="truncate font-semibold underline-offset-2 hover:underline">
               {worker.name}
             </Link>
             {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
@@ -229,9 +230,12 @@ function BoardItem({ row, now, timeZone, radiusM }: { row: BoardRow; now: number
 
       <div className="flex flex-wrap gap-2 sm:justify-end">
         {state === "in" && openLog ? (
-          <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => clockOutNow(openLog.id))}>
-            <LogOut /> Clock out now
-          </Button>
+          <>
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => clockOutNow(openLog.id))}>
+              <LogOut /> Clock out now
+            </Button>
+            <DeleteButton disabled={pending} onConfirm={() => run(() => deleteDay(openLog.id))} />
+          </>
         ) : (
           <>
             <MarkButton
@@ -258,6 +262,9 @@ function BoardItem({ row, now, timeZone, radiusM }: { row: BoardRow; now: number
             >
               <X /> Absent
             </MarkButton>
+            {state === "done" && log && (
+              <DeleteButton disabled={pending} onConfirm={() => run(() => deleteDay(log.id))} />
+            )}
             {state === "marked" && (
               <Button
                 size="sm"
@@ -282,4 +289,27 @@ function MarkButton({
   ...props
 }: React.ComponentProps<typeof Button> & { active?: boolean }) {
   return <Button size="sm" variant="outline" data-active={Boolean(active)} className={className} {...props} />;
+}
+
+/** Deletes today's entry after a second tap (the first tap asks "Delete?"). */
+function DeleteButton({ onConfirm, disabled }: { onConfirm: () => void; disabled?: boolean }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const id = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(id);
+  }, [armed]);
+  return (
+    <Button
+      size="sm"
+      variant={armed ? "destructive" : "ghost"}
+      disabled={disabled}
+      aria-label={armed ? "Tap again to delete" : "Delete entry"}
+      className={cn(!armed && "text-destructive")}
+      onClick={() => (armed ? onConfirm() : setArmed(true))}
+    >
+      <Trash2 />
+      {armed && "Delete?"}
+    </Button>
+  );
 }

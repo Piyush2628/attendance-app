@@ -5,7 +5,7 @@ import { EditDayDialog } from "@/components/attendance/edit-day-dialog";
 import { EmployeePicker } from "@/components/attendance/employee-picker";
 import { LateTag, SelfieThumbs } from "@/components/attendance/punch-tags";
 import { Button } from "@/components/ui/button";
-import { getSelfieIds, requireOwner, type SelfieIds } from "@/lib/admin/data";
+import { requireOwner, SELFIE_IDS, selfieIds } from "@/lib/admin/data";
 import { daysBetween, isIsoDate, monthName, rangeFor, shortDay, VIEWS, weekday, type View } from "@/lib/admin/calendar";
 import { formatMinutes } from "@/lib/format";
 import { isOffDay, offDaysLabel } from "@/lib/timing";
@@ -43,7 +43,20 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
   const date = isIsoDate(sp.d) ? sp.d : today;
   const range = rangeFor(view, date);
 
-  const workers = await supabase.from("workers").select("id, name, is_active").order("is_active", { ascending: false }).order("name");
+  // Load the employee list and the requested employee's days together (one round trip).
+  const loadLogs = (workerId: string) =>
+    supabase
+      .from("attendance_logs")
+      .select(`id, date, clock_in, clock_out, total_minutes, status, ot_minutes, manual_override, late_minutes, notes, ${SELFIE_IDS}`)
+      .eq("worker_id", workerId)
+      .gte("date", range.from)
+      .lte("date", range.to)
+      .order("date");
+  const requested = typeof sp.e === "string" && UUID.test(sp.e) ? sp.e : null;
+  const [workers, requestedLogs] = await Promise.all([
+    supabase.from("workers").select("id, name, is_active").order("is_active", { ascending: false }).order("name"),
+    requested ? loadLogs(requested) : null,
+  ]);
   if (workers.error) throw workers.error;
   if (workers.data.length === 0) {
     return (
@@ -55,21 +68,13 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
       </div>
     );
   }
-  const selectedId =
-    typeof sp.e === "string" && UUID.test(sp.e) && workers.data.some((w) => w.id === sp.e) ? sp.e : workers.data[0].id;
+  const selectedId = requested && workers.data.some((w) => w.id === requested) ? requested : workers.data[0].id;
 
-  const logsRes = await supabase
-    .from("attendance_logs")
-    .select("id, date, clock_in, clock_out, total_minutes, status, ot_minutes, manual_override, late_minutes, notes")
-    .eq("worker_id", selectedId)
-    .gte("date", range.from)
-    .lte("date", range.to)
-    .order("date");
+  const logsRes = selectedId === requested && requestedLogs ? requestedLogs : await loadLogs(selectedId);
   if (logsRes.error) throw logsRes.error;
   const logs: Log[] = logsRes.data;
   const byDate = new Map(logs.map((l) => [l.date, l]));
-  // The year view shows counts only, so it doesn't need the photos.
-  const selfies = view === "year" ? new Map<string, SelfieIds>() : await getSelfieIds(supabase, logs.map((l) => l.id));
+  const selfies = new Map(logsRes.data.map((l) => [l.id, selfieIds(l.punch_selfies)]));
   const workerName = workers.data.find((w) => w.id === selectedId)?.name ?? "";
 
   // Totals match the salary: off days are recorded but not counted.
@@ -343,7 +348,7 @@ function YearTable({ year, logs, monthHref }: { year: string; logs: Log[]; month
           {months.map((r) => (
             <tr key={r.m} className={cn(r.present + r.half + r.absent === 0 && "text-muted-foreground")}>
               <td className="p-0">
-                <Link href={monthHref(r.first)} className="block p-2 font-medium underline-offset-2 hover:underline">
+                <Link href={monthHref(r.first)} prefetch={false} className="block p-2 font-medium underline-offset-2 hover:underline">
                   {monthName(r.m)}
                 </Link>
               </td>

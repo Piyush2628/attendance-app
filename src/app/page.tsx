@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Fingerprint, LayoutDashboard } from "lucide-react";
 
+import { InstallButton } from "@/components/pwa/install-button";
 import { Button } from "@/components/ui/button";
 
 export default function Home() {
@@ -22,6 +23,7 @@ export default function Home() {
           Owner login
         </Link>
       </Button>
+      <InstallButton className="self-center" />
     </main>
   );
 }

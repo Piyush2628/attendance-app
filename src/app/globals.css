@@ -95,6 +95,14 @@
   }
 }
 
+/* Installed app: iOS draws the status bar over the page (black-translucent),
+   so keep content clear of the notch / clock. */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  body {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
 /* Salary slips: print only the slip, on A4 */
 @media print {
   @page {

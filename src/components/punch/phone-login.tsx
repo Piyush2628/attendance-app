@@ -7,6 +7,7 @@ import { ArrowLeft, Smartphone } from "lucide-react";
 
 import { workerLogin } from "@/app/punch/actions";
 import { ErrorBox } from "@/components/punch/kiosk-app";
+import { OFFLINE_ERROR } from "@/components/punch/messages";
 import { PinPad } from "@/components/punch/pin-pad";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,9 @@ export function PhoneLogin({ businessName }: { businessName: string }) {
       setError(res);
       setErrorKey((k) => k + 1);
       if (res.error === "not_found") setStep("phone");
+    } catch {
+      setError(OFFLINE_ERROR);
+      setErrorKey((k) => k + 1);
     } finally {
       setBusy(false);
     }

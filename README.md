@@ -9,7 +9,7 @@ Supabase.
 
 - Next.js 16 (App Router, TypeScript), Tailwind CSS v4, shadcn/ui (new-york), Lucide icons
 - Supabase: Postgres, Auth (owners only), Row Level Security, Realtime
-- PWA: `src/app/manifest.ts` + Apple web-app meta tags, installs full screen
+- PWA: `src/app/manifest.ts`, `public/sw.js` (offline screen only) and Apple web-app meta tags; installs full screen
 
 ## Getting started
 
@@ -30,7 +30,7 @@ supabase/
 src/
   proxy.ts                     refreshes the owner's session, guards /admin
   app/
-    manifest.ts                PWA manifest (step 5)
+    manifest.ts                PWA manifest: opens on /punch, full screen, shortcuts
     login/                     owner sign-in and sign-up (step 2)
     auth/confirm/              sign-up email confirmation link
     admin/                     owner dashboard: live board (step 2)
@@ -63,6 +63,22 @@ to the punch screen.
 - **Own phone:** "On your own phone? Log in once here" asks for phone number and PIN, then the
   phone stays logged in for 90 days (httpOnly cookie; changing the PIN logs it out).
 - Labels have a short Hindi line under the English.
+
+## Installing on phones and tablets
+
+Open the punch link once on the device, then:
+
+- **Android (Chrome, Samsung Internet):** tap **Install app** at the bottom of the punch screen.
+  The app opens full screen on the punch screen. Long-press its icon for Dashboard and Payroll
+  shortcuts.
+- **iPhone / iPad (Safari):** tap **Add to Home Screen** for the three steps (Share → Add to Home
+  Screen → Add).
+
+While the kiosk screen is open it asks the browser to keep the display on. With no internet a red
+banner appears, a punch attempt says nothing was saved, and pages that can't load show a simple
+"No internet" screen that reloads itself when the connection returns. Nothing is cached, so
+attendance and pay always come fresh from the database. The service worker only runs in
+production builds (`npm run build && npm start`), not in `npm run dev`.
 
 ## How worker PINs stay safe
 

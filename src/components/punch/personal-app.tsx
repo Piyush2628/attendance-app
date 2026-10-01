@@ -5,8 +5,10 @@ import { LogOut } from "lucide-react";
 
 import { workerLogout, workerPunch, workerStatus } from "@/app/punch/actions";
 import { ErrorBox } from "@/components/punch/kiosk-app";
+import { OFFLINE_ERROR } from "@/components/punch/messages";
 import { SuccessScreen } from "@/components/punch/success-screen";
 import { WorkerPanel } from "@/components/punch/worker-panel";
+import { InstallButton } from "@/components/pwa/install-button";
 import { Button } from "@/components/ui/button";
 import type { PunchError, PunchResult, WorkerSummary } from "@/types/database";
 
@@ -26,6 +28,8 @@ export function PersonalApp({ initialSummary }: { initialSummary: WorkerSummary 
         setDone(res);
         setSummary(res.summary);
       } else setError(res);
+    } catch {
+      setError(OFFLINE_ERROR);
     } finally {
       setBusy(false);
     }
@@ -58,6 +62,7 @@ export function PersonalApp({ initialSummary }: { initialSummary: WorkerSummary 
         footer={
           <>
             {error && <ErrorBox error={error} />}
+            <InstallButton className="mt-4" />
             <form action={workerLogout} className="mt-4">
               <Button variant="ghost" type="submit" className="text-muted-foreground">
                 <LogOut /> Log out of this phone

@@ -28,7 +28,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
   const { supabase, settings, today } = await requireOwner();
   const period = parsePeriod(await searchParams, today);
 
-  const [worker, logs, advances, payroll] = await Promise.all([
+  const [worker, logs, payroll] = await Promise.all([
     supabase
       .from("workers")
       .select("id, name, phone, wage_type, daily_rate, hourly_rate, monthly_salary, standard_shift_hours, ot_rate_per_hour")
@@ -41,18 +41,10 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
       .gte("date", period.from)
       .lte("date", period.to)
       .order("date"),
-    supabase
-      .from("advances")
-      .select("id, date, amount, notes")
-      .eq("worker_id", workerId)
-      .gte("date", period.from)
-      .lte("date", period.to)
-      .order("date"),
     getPayroll(supabase, period),
   ]);
   if (worker.error) throw worker.error;
   if (logs.error) throw logs.error;
-  if (advances.error) throw advances.error;
   // RLS hides other owners' workers, so this is also the ownership check.
   if (!worker.data) notFound();
 
@@ -103,24 +95,21 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
     `*Salary slip* – ${settings.business_name}`,
     `${w.name} · ${period.label}`,
     `Present: ${p.days_present}, Half days: ${p.half_days}, OT: ${formatHours(p.ot_hours)} h`,
-    `Gross pay: ${money(p.gross_pay)}`,
-    `Advances: − ${money(p.advances_total)}`,
-    p.net_payable < 0
-      ? `*Employee owes: ${money(-p.net_payable)}*`
-      : `*Net payable: ${money(p.net_payable)}*`,
+    `Base pay: ${money(p.base_pay)}, Overtime: ${money(p.ot_pay)}`,
+    `*Salary: ${money(p.gross_pay)}*`,
   ].join("\n");
   const waNumber = whatsappNumber(w.phone, settings.currency);
   const waHref = `https://wa.me/${waNumber}?text=${encodeURIComponent(shareText)}`;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <div className="no-print flex flex-wrap items-center gap-2">
         <Button asChild variant="ghost">
           <Link href={`/admin/payroll?${periodQuery(period)}`}>
             <ArrowLeft /> Payroll
           </Link>
         </Button>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
           <Button asChild variant="outline">
             <a href={waHref} target="_blank" rel="noopener noreferrer">
               <MessageCircle /> WhatsApp
@@ -131,7 +120,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
       </div>
 
       <article
-        className="slip mx-auto grid w-full max-w-[210mm] gap-5 rounded-xl border bg-white p-4 text-neutral-900 sm:p-8 print:max-w-none print:rounded-none print:border-0 print:p-0"
+        className="slip mx-auto grid w-full grid-cols-1 max-w-[210mm] gap-5 rounded-xl border bg-white p-4 text-neutral-900 sm:p-8 print:max-w-none print:rounded-none print:border-0 print:p-0"
         data-testid="salary-slip"
       >
         <header className="flex flex-wrap items-start justify-between gap-2 border-b-2 border-neutral-900 pb-3">
@@ -169,47 +158,21 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
           </p>
         )}
 
-        <section className="grid gap-4 sm:grid-cols-2">
-          <table className="w-full text-sm">
-            <caption className="pb-1 text-left font-semibold">Earnings · कमाई</caption>
-            <tbody className="divide-y divide-neutral-200">
-              <Line label="Base pay" note={baseText} amount={money(p.base_pay)} />
-              <Line label="Overtime" note={`${formatHours(p.ot_hours)} h × ${money(otRate)}`} amount={money(p.ot_pay)} />
-              <Line label="Gross pay" amount={money(p.gross_pay)} strong />
-            </tbody>
-          </table>
-          <table className="w-full text-sm">
-            <caption className="pb-1 text-left font-semibold">Deductions · उधारी</caption>
-            <tbody className="divide-y divide-neutral-200">
-              {advances.data.length === 0 ? (
-                <Line label="No advances" amount={money(0)} />
-              ) : (
-                advances.data.map((a) => (
-                  <Line key={a.id} label={`Advance ${day(a.date)}`} note={a.notes ?? undefined} amount={money(a.amount)} />
-                ))
-              )}
-              <Line label="Total advances" amount={money(p.advances_total)} strong />
-            </tbody>
-          </table>
-        </section>
+        <table className="w-full text-sm">
+          <caption className="pb-1 text-left font-semibold">Earnings · कमाई</caption>
+          <tbody className="divide-y divide-neutral-200">
+            <Line label="Base pay" note={baseText} amount={money(p.base_pay)} />
+            <Line label="Overtime" note={`${formatHours(p.ot_hours)} h × ${money(otRate)}`} amount={money(p.ot_pay)} />
+          </tbody>
+        </table>
 
-        <section
-          className={cn(
-            "flex items-center justify-between rounded-xl border-2 p-4",
-            p.net_payable < 0 ? "border-red-600 bg-red-50" : "border-green-600 bg-green-50",
-          )}
-        >
+        <section className="flex items-center justify-between rounded-xl border-2 border-green-600 bg-green-50 p-4">
           <div>
-            <div className="text-lg font-bold">Net payable</div>
-            <div className="text-sm text-neutral-600">
-              {p.net_payable < 0 ? "Advances are more than pay; employee owes this amount" : "कुल देय राशि"}
-            </div>
+            <div className="text-lg font-bold">Salary</div>
+            <div className="text-sm text-neutral-600">कुल वेतन</div>
           </div>
-          <div
-            className={cn("text-3xl font-black tabular-nums", p.net_payable < 0 ? "text-red-700" : "text-green-700")}
-            data-testid="net-payable"
-          >
-            {money(Math.abs(p.net_payable))}
+          <div className="text-3xl font-black text-green-700 tabular-nums" data-testid="salary-total">
+            {money(p.gross_pay)}
           </div>
         </section>
 
@@ -295,9 +258,9 @@ function Box({ label, sub, value }: { label: string; sub: string; value: React.R
   );
 }
 
-function Line({ label, note, amount, strong }: { label: string; note?: string; amount: string; strong?: boolean }) {
+function Line({ label, note, amount }: { label: string; note?: string; amount: string }) {
   return (
-    <tr className={cn(strong && "font-semibold")}>
+    <tr>
       <td className="py-1">
         {label}
         {note && <div className="text-xs font-normal text-neutral-500">{note}</div>}

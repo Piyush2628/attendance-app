@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     default: "Attendance & Salary",
     template: "%s · Attendance",
   },
-  description: "Simple attendance, overtime, advances and salary for small businesses.",
+  description: "Simple attendance, overtime and salary for small businesses.",
   applicationName: "Attendance",
   // iOS "Add to Home Screen": run full screen without Safari chrome
   appleWebApp: {

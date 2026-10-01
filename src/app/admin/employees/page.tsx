@@ -1,6 +1,10 @@
+import Link from "next/link";
+import { CalendarDays } from "lucide-react";
+
 import { WorkerActiveToggle } from "@/components/admin/worker-active-toggle";
 import { WorkerFormDialog } from "@/components/admin/worker-form-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { WorkerAvatar } from "@/components/worker-avatar";
 import { requireOwner } from "@/lib/admin/data";
 import { formatMoney } from "@/lib/format";
@@ -32,7 +36,7 @@ export default async function WorkersPage() {
   const inactive = workers.filter((w) => !w.is_active);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Employees</h1>
@@ -47,7 +51,7 @@ export default async function WorkersPage() {
         </p>
       )}
 
-      <ul className="grid gap-2 md:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
         {active.map((w) => (
           <WorkerCard key={w.id} worker={w} ownerId={settings.owner_id} />
         ))}
@@ -58,7 +62,7 @@ export default async function WorkersPage() {
           <summary className="text-muted-foreground cursor-pointer text-sm">
             Inactive employees ({inactive.length})
           </summary>
-          <ul className="mt-2 grid gap-2 opacity-70 md:grid-cols-2">
+          <ul className="mt-2 grid grid-cols-1 gap-2 opacity-70 md:grid-cols-2">
             {inactive.map((w) => (
               <WorkerCard key={w.id} worker={w} ownerId={settings.owner_id} />
             ))}
@@ -83,8 +87,15 @@ function WorkerCard({ worker, ownerId }: { worker: Worker; ownerId: string }) {
         <div className="text-muted-foreground truncate text-sm">{payLine(worker)}</div>
         {worker.phone && <div className="text-muted-foreground text-xs">{worker.phone}</div>}
       </div>
-      <div className="flex flex-col items-end gap-1">
-        <WorkerFormDialog ownerId={ownerId} worker={worker} />
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <div className="flex gap-1">
+          <Button asChild variant="outline" size="sm" aria-label={`Attendance of ${worker.name}`}>
+            <Link href={`/admin/attendance?e=${worker.id}`}>
+              <CalendarDays />
+            </Link>
+          </Button>
+          <WorkerFormDialog ownerId={ownerId} worker={worker} />
+        </div>
         <WorkerActiveToggle workerId={worker.id} active={worker.is_active} name={worker.name} />
       </div>
     </li>

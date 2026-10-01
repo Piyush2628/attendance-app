@@ -31,15 +31,16 @@ export async function getPayroll(supabase: Client, period: Pick<Period, "from" |
   });
 }
 
+/** Salary is the gross pay: this business gives no advances, so nothing is deducted. */
 export function payrollTotals(rows: PayrollRow[]) {
   return rows.reduce(
     (t, r) => ({
-      gross: t.gross + r.gross_pay,
-      advances: t.advances + r.advances_total,
-      net: t.net + r.net_payable,
+      base: t.base + r.base_pay,
+      ot: t.ot + r.ot_pay,
+      salary: t.salary + r.gross_pay,
       openPunches: t.openPunches + r.open_punches,
     }),
-    { gross: 0, advances: 0, net: 0, openPunches: 0 },
+    { base: 0, ot: 0, salary: 0, openPunches: 0 },
   );
 }
 

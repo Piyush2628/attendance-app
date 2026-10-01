@@ -1,8 +1,8 @@
 # Attendance & Salary
 
 Attendance and payroll for small businesses, workshops and daily-wage / contract staff.
-Employees clock in and out with a 4-digit PIN; the owner sees who is in today, records cash
-advances (udhari) and prints salary slips. Runs entirely on free tiers: Next.js on Vercel and
+Employees clock in and out with a 4-digit PIN; the owner sees who is in today, looks back at
+each employee's week, month or year, and prints salary slips. Runs entirely on free tiers: Next.js on Vercel and
 Supabase.
 
 ## Stack
@@ -40,7 +40,8 @@ src/
     auth/confirm/              sign-up email confirmation link
     admin/                     owner dashboard: live board (step 2)
       employees/               add / edit employees, set PINs
-      khata/                   cash advances (step 2)
+      attendance/              one employee's week / month / year (?e=&view=&d=)
+      settings/                punch link, location check
       payroll/                 salary report, ?from=&to= (default: this month)
       payroll/[workerId]/      printable A4 / phone salary slip
     punch/                     worker kiosk + personal phone mode (step 3)
@@ -53,6 +54,7 @@ src/
     worker-session.ts          httpOnly cookie for personal-mode worker sessions
     format.ts                  minutes, rupees, month ranges
     admin/period.ts            pay period from ?from=&to=
+    admin/calendar.ts          week / month / year ranges for the attendance page
   types/database.ts            typed schema + RPC result shapes
 ```
 
@@ -125,9 +127,9 @@ Employees have no Supabase Auth account and the `anon` role cannot read any tabl
 ## Payroll and salary slips
 
 **Payroll** shows every employee for a month (arrows) or any date range up to a year: days
-present, half days, OT hours, gross pay, advances deducted and net payable, with totals.
-Shifts that are still clocked in are left out and flagged. **Slip** opens one employee's salary
-slip with the pay worked out line by line, each advance, and every day's in/out times. Print
+present, half days, OT hours, base pay, OT pay and salary, with totals. Shifts that are still
+clocked in are left out and flagged. **Slip** opens one employee's salary slip with the pay
+worked out line by line and every day's in/out times. Print
 gives a clean A4 page with signature and thumb-impression lines; WhatsApp opens a chat with the
 employee (or a contact picker if no phone is saved) with the summary filled in.
 
@@ -139,7 +141,9 @@ employee (or a contact picker if no phone is saved) with the summary filled in.
 | Hourly | regular hours × hourly rate | OT hours × OT rate (hourly rate if OT rate is 0) |
 | Monthly | present = salary ÷ days in month, half day = 50% of that | OT hours × OT rate |
 
-Net payable = gross − advances dated in the same range. A day's status is set when the employee
+The business gives no cash advances, so the app has no advances screen and salary is the gross
+pay. (The `advances` table and the `advances_total` / `net_payable` columns of `payroll_report`
+are still in the database, unused.) A day's status is set when the employee
 clocks out: a full shift is present, at least half a shift is half day, less is absent. The
 owner's manual mark always wins.
 

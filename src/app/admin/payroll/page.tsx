@@ -22,12 +22,12 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
   const slipHref = (workerId: string) => `/admin/payroll/${workerId}?${periodQuery(period)}`;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <div className="flex items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">Payroll</h1>
           <p className="text-muted-foreground text-sm">
-            <span className="no-print">Salary for each employee, after advances (udhari).</span>
+            <span className="no-print">Salary for each employee.</span>
             <span className="hidden print:inline">
               {settings.business_name} · {period.label}
             </span>
@@ -41,9 +41,9 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
       <PeriodPicker path="/admin/payroll" period={period} today={today} />
 
       <div className="grid grid-cols-3 gap-2">
-        <Stat label="Gross pay" value={money(totals.gross)} />
-        <Stat label="Advances" value={money(totals.advances)} />
-        <Stat label="Net payable" value={money(totals.net)} strong />
+        <Stat label="Base pay" value={money(totals.base)} />
+        <Stat label="Overtime pay" value={money(totals.ot)} />
+        <Stat label="Total salary" value={money(totals.salary)} strong />
       </div>
 
       {totals.openPunches > 0 && (
@@ -60,36 +60,30 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
         </p>
       ) : (
         <>
-          {/* Phone: one card per worker */}
-          <ul className="grid gap-2 md:hidden print:hidden" data-testid="payroll-cards">
+          {/* Phone: one card per employee */}
+          <ul className="grid grid-cols-1 gap-2 md:hidden print:hidden" data-testid="payroll-cards">
             {rows.map((r) => (
-              <li key={r.worker_id} className="rounded-xl border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">{r.worker_name}</div>
-                    <Badge variant="outline">{WAGE_LABEL[r.wage_type]}</Badge>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-muted-foreground text-xs">Net payable</div>
-                    <div className={cn("text-xl font-bold", r.net_payable < 0 && "text-punch-out")}>
-                      {money(r.net_payable)}
+              <li key={r.worker_id}>
+                <Link href={slipHref(r.worker_id)} className="block rounded-xl border p-3 active:bg-muted">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold">{r.worker_name}</div>
+                      <Badge variant="outline">{WAGE_LABEL[r.wage_type]}</Badge>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-muted-foreground text-xs">Salary</div>
+                      <div className="text-xl font-bold">{money(r.gross_pay)}</div>
                     </div>
                   </div>
-                </div>
-                <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
-                  <Cell label="Present" value={r.days_present} />
-                  <Cell label="Half days" value={r.half_days} />
-                  <Cell label="OT hours" value={formatHours(r.ot_hours)} />
-                  <Cell label="Gross" value={money(r.gross_pay)} />
-                  <Cell label="Advances" value={r.advances_total ? `− ${money(r.advances_total)}` : money(0)} />
-                  <div className="flex items-end justify-end">
-                    <Button asChild size="sm" variant="secondary">
-                      <Link href={slipHref(r.worker_id)}>
-                        <FileText /> Slip
-                      </Link>
-                    </Button>
+                  <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                    <Cell label="Present" value={r.days_present} />
+                    <Cell label="Half days" value={r.half_days} />
+                    <Cell label="OT hours" value={formatHours(r.ot_hours)} />
+                  </dl>
+                  <div className="text-primary mt-2 flex items-center gap-1 text-sm font-medium">
+                    <FileText className="size-4" /> Open salary slip
                   </div>
-                </dl>
+                </Link>
               </li>
             ))}
           </ul>
@@ -104,9 +98,9 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
                   <th className="p-2 text-right font-medium">Days Present</th>
                   <th className="p-2 text-right font-medium">Half Days</th>
                   <th className="p-2 text-right font-medium">OT Hours</th>
-                  <th className="p-2 text-right font-medium">Gross Pay</th>
-                  <th className="p-2 text-right font-medium">Advances Deducted</th>
-                  <th className="p-2 text-right font-medium">Net Payable</th>
+                  <th className="p-2 text-right font-medium">Base Pay</th>
+                  <th className="p-2 text-right font-medium">OT Pay</th>
+                  <th className="p-2 text-right font-medium">Salary</th>
                   <th className="no-print p-2 font-medium">
                     <span className="sr-only">Action</span>
                   </th>
@@ -120,18 +114,9 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
                     <td className="p-2 text-right tabular-nums">{r.days_present}</td>
                     <td className="p-2 text-right tabular-nums">{r.half_days}</td>
                     <td className="p-2 text-right tabular-nums">{formatHours(r.ot_hours)}</td>
-                    <td className="p-2 text-right tabular-nums">{money(r.gross_pay)}</td>
-                    <td className="p-2 text-right tabular-nums">
-                      {r.advances_total ? `− ${money(r.advances_total)}` : "—"}
-                    </td>
-                    <td
-                      className={cn(
-                        "p-2 text-right font-semibold tabular-nums",
-                        r.net_payable < 0 && "text-punch-out",
-                      )}
-                    >
-                      {money(r.net_payable)}
-                    </td>
+                    <td className="p-2 text-right tabular-nums">{money(r.base_pay)}</td>
+                    <td className="p-2 text-right tabular-nums">{money(r.ot_pay)}</td>
+                    <td className="p-2 text-right font-semibold tabular-nums">{money(r.gross_pay)}</td>
                     <td className="no-print p-2 text-right">
                       <Button asChild size="sm" variant="secondary">
                         <Link href={slipHref(r.worker_id)}>
@@ -147,20 +132,14 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
                   <td className="p-2" colSpan={5}>
                     Total
                   </td>
-                  <td className="p-2 text-right tabular-nums">{money(totals.gross)}</td>
-                  <td className="p-2 text-right tabular-nums">{money(totals.advances)}</td>
-                  <td className="p-2 text-right tabular-nums">{money(totals.net)}</td>
+                  <td className="p-2 text-right tabular-nums">{money(totals.base)}</td>
+                  <td className="p-2 text-right tabular-nums">{money(totals.ot)}</td>
+                  <td className="p-2 text-right tabular-nums">{money(totals.salary)}</td>
                   <td className="no-print" />
                 </tr>
               </tfoot>
             </table>
           </div>
-          {rows.some((r) => r.net_payable < 0) && (
-            <p className="text-muted-foreground text-sm">
-              A negative net means the advances are more than the salary for this period; the employee still owes the
-              difference.
-            </p>
-          )}
         </>
       )}
     </div>

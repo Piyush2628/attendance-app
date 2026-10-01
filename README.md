@@ -1,0 +1,92 @@
+# Attendance & Salary
+
+Attendance and payroll for small businesses, workshops and daily-wage / contract staff.
+Workers clock in and out with a 4-digit PIN; the owner sees who is in today, records cash
+advances (udhari) and prints salary slips. Runs entirely on free tiers: Next.js on Vercel and
+Supabase.
+
+## Stack
+
+- Next.js 16 (App Router, TypeScript), Tailwind CSS v4, shadcn/ui (new-york), Lucide icons
+- Supabase: Postgres, Auth (owners only), Row Level Security, Realtime
+- PWA: `src/app/manifest.ts` + Apple web-app meta tags, installs full screen
+
+## Getting started
+
+1. Create a free Supabase project.
+2. Run `supabase/migrations/01_schema.sql` in the SQL editor (or `supabase db push` with the CLI).
+3. `cp .env.example .env.local` and fill in the project URL and anon key.
+4. `npm install && npm run dev`, then open http://localhost:3000.
+
+## Layout
+
+```
+supabase/
+  migrations/01_schema.sql     tables, enums, triggers, RLS, RPCs (step 1)
+  tests/                       plain-Postgres behaviour tests for the migration
+src/
+  proxy.ts                     refreshes the owner's session, guards /admin
+  app/
+    manifest.ts                PWA manifest (step 5)
+    login/                     owner email + password sign-in (step 2)
+    admin/                     owner dashboard: live board (step 2)
+      workers/                 add / edit workers, set PINs (step 2)
+      khata/                   cash advances (step 2)
+      payroll/                 salary report (step 4)
+      payroll/[workerId]/      printable salary slip (step 4)
+    punch/                     worker kiosk + personal phone mode (step 3)
+  components/
+    ui/                        shadcn/ui primitives
+    admin/  punch/             feature components
+  lib/
+    supabase/                  browser, server and proxy clients
+    worker-session.ts          httpOnly cookie for personal-mode worker sessions
+    format.ts                  minutes, rupees, month ranges
+  types/database.ts            typed schema + RPC result shapes
+```
+
+## How worker PINs stay safe
+
+Workers have no Supabase Auth account and the `anon` role cannot read any table. Everything on
+`/punch` goes through `SECURITY DEFINER` functions:
+
+| Function | Who | What it returns |
+| --- | --- | --- |
+| `kiosk_list_workers(code)` | anon | business name + each worker's name, photo, clocked-in flag |
+| `kiosk_verify_pin(code, worker, pin)` | anon | that worker's today + last 7 days |
+| `kiosk_punch(code, worker, pin)` | anon | clock in or out, then the summary |
+| `worker_login(code, phone, pin)` | anon | a 90-day session token for a personal phone |
+| `worker_status(token)` / `worker_punch(token)` / `worker_logout(token)` | anon | same, by token |
+| `set_worker_pin(worker, pin)` | owner | sets a bcrypt hash, clears lockout, logs out phones |
+| `mark_attendance(worker, date, status)` | owner | manual Present / Half Day / Absent |
+| `payroll_report(start, end)` | owner | one payroll row per worker |
+
+- `code` is the owner's `owner_settings.kiosk_code`, a random 10-character code shared as a link
+  (`/punch?k=CODE`) or QR. Without it nobody can even list a business's workers.
+- PINs are bcrypt-hashed with pgcrypto. `pin_hash` is excluded from the owner's column grants,
+  so even the admin dashboard can't read it.
+- 5 wrong PINs lock that worker for 15 minutes.
+- Session tokens are stored only as SHA-256 hashes.
+
+## Pay rules (in `payroll_report`)
+
+| Type | Base | Overtime |
+| --- | --- | --- |
+| Daily | present = daily rate, half day = 50% | hours past the shift × OT rate |
+| Hourly | regular hours × hourly rate | OT hours × OT rate (hourly rate if OT rate is 0) |
+| Monthly | present = salary ÷ days in month, half day = 50% of that | OT hours × OT rate |
+
+Net payable = gross − advances dated in the same range. A day's status is set when the worker
+clocks out: a full shift is present, at least half a shift is half day, less is absent. The
+owner's manual mark always wins.
+
+## Database tests
+
+With Postgres 16 installed locally (no Docker or Supabase CLI needed):
+
+```
+npm run db:test
+```
+
+It creates a scratch database, loads a small stand-in for Supabase's `auth` schema and roles,
+applies the migration and runs `supabase/tests/schema_test.sql`.

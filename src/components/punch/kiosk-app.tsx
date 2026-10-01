@@ -7,11 +7,13 @@ import { ArrowLeft, Smartphone } from "lucide-react";
 import { kioskPunch, kioskVerify, listKioskWorkers } from "@/app/punch/actions";
 import { errorMessage, OFFLINE_ERROR } from "@/components/punch/messages";
 import { PinPad } from "@/components/punch/pin-pad";
+import { punchWithLocation } from "@/components/punch/punch-with-location";
 import { SuccessScreen } from "@/components/punch/success-screen";
 import { WorkerPanel } from "@/components/punch/worker-panel";
 import { InstallButton } from "@/components/pwa/install-button";
 import { Button } from "@/components/ui/button";
 import { WorkerAvatar } from "@/components/worker-avatar";
+import { warmUpLocation } from "@/lib/geo";
 import { useWakeLock } from "@/lib/pwa";
 import { cn } from "@/lib/utils";
 import type { PunchError, WorkerSummary } from "@/types/database";
@@ -27,15 +29,29 @@ type Step =
 const IDLE_MS = 20_000; // back to the worker list if nobody touches the screen
 
 /** Shared tablet: tap your photo, enter PIN, tap the big button. */
-export function KioskApp({ businessName, initialWorkers }: { businessName: string; initialWorkers: KioskWorker[] }) {
+export function KioskApp({
+  businessName,
+  initialWorkers,
+  gpsRequired,
+}: {
+  businessName: string;
+  initialWorkers: KioskWorker[];
+  gpsRequired: boolean;
+}) {
   const [workers, setWorkers] = useState(initialWorkers);
   const [step, setStep] = useState<Step>({ kind: "grid" });
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<false | "punch" | "location">(false);
   const [error, setError] = useState<PunchError | null>(null);
   const [errorKey, setErrorKey] = useState(0);
   const idle = useRef<ReturnType<typeof setTimeout>>(undefined);
   // A kiosk tablet should not go dark between workers.
   useWakeLock();
+
+  // With the GPS check on, get the permission prompt out of the way now,
+  // not in front of the first employee who punches.
+  useEffect(() => {
+    if (gpsRequired) warmUpLocation();
+  }, [gpsRequired]);
 
   const backToGrid = useCallback(() => {
     setStep({ kind: "grid" });
@@ -57,12 +73,13 @@ export function KioskApp({ businessName, initialWorkers }: { businessName: strin
   // Idle timeout: never leave a worker's screen (with their PIN in memory) open.
   useEffect(() => {
     clearTimeout(idle.current);
-    if (step.kind === "pin" || step.kind === "panel") idle.current = setTimeout(backToGrid, IDLE_MS);
+    // Paused while a punch is in flight (finding the location can take a few seconds).
+    if ((step.kind === "pin" || step.kind === "panel") && !busy) idle.current = setTimeout(backToGrid, IDLE_MS);
     return () => clearTimeout(idle.current);
-  }, [step, errorKey, backToGrid]);
+  }, [step, errorKey, busy, backToGrid]);
 
   async function onPin(worker: KioskWorker, pin: string) {
-    setBusy(true);
+    setBusy("punch");
     setError(null);
     try {
       const res = await kioskVerify(worker.id, pin);
@@ -79,11 +96,15 @@ export function KioskApp({ businessName, initialWorkers }: { businessName: strin
     }
   }
 
-  async function onPunch(worker: KioskWorker, pin: string) {
-    setBusy(true);
+  async function onPunch(worker: KioskWorker, pin: string, needsLocation: boolean) {
     setError(null);
     try {
-      const res = await kioskPunch(worker.id, pin);
+      const res = await punchWithLocation(
+        needsLocation,
+        (fix) => kioskPunch(worker.id, pin, fix),
+        () => setBusy("location"),
+        () => setBusy("punch"),
+      );
       if (res.ok) {
         setStep({ kind: "done", name: worker.name, action: res.action, at: res.at, totalMinutes: res.total_minutes });
         setWorkers((ws) => ws.map((w) => (w.id === worker.id ? { ...w, clocked_in: res.action === "clock_in" } : w)));
@@ -114,10 +135,14 @@ export function KioskApp({ businessName, initialWorkers }: { businessName: strin
                 <div className="text-3xl font-bold">{worker.name}</div>
                 <div className="text-muted-foreground text-lg">Enter your PIN · अपना PIN डालें</div>
               </div>
-              <PinPad busy={busy} errorKey={errorKey} onComplete={(pin) => onPin(worker, pin)} />
+              <PinPad busy={Boolean(busy)} errorKey={errorKey} onComplete={(pin) => onPin(worker, pin)} />
             </>
           ) : (
-            <WorkerPanel summary={step.summary} busy={busy} onPunch={() => onPunch(worker, step.pin)} />
+            <WorkerPanel
+              summary={step.summary}
+              busy={busy}
+              onPunch={() => onPunch(worker, step.pin, step.summary.gps_required)}
+            />
           )}
           {error && <ErrorBox error={error} />}
         </div>

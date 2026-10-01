@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireOwner } from "@/lib/admin/data";
+import { parseCoordinates } from "@/lib/geo";
 import type { AttendanceStatus } from "@/types/database";
 
 const STATUSES: AttendanceStatus[] = ["present", "half_day", "absent"];
@@ -47,4 +48,35 @@ export async function clockOutNow(logId: string) {
   if (error) return { error: error.message };
   revalidatePath("/admin");
   return {};
+}
+
+export type WorkLocationState = { ok?: boolean; error?: string; savedAt?: number };
+
+/** Work location + radius for the GPS check on punches (04_gps.sql). */
+export async function saveWorkLocation(_prev: WorkLocationState, formData: FormData): Promise<WorkLocationState> {
+  const coordsText = String(formData.get("coords") ?? "").trim();
+  const radius = Math.round(Number(formData.get("radius")));
+  const gpsRequired = formData.get("gps_required") === "on";
+
+  const coords = coordsText ? parseCoordinates(coordsText) : null;
+  if (coordsText && !coords) {
+    return { error: "Location not understood. Tap “Use my current location”, or paste it like 28.6139, 77.2090." };
+  }
+  if (gpsRequired && !coords) return { error: "Set the work location first." };
+  if (!Number.isFinite(radius) || radius < 20 || radius > 5000) return { error: "Choose a distance." };
+
+  const { supabase, settings } = await requireOwner();
+  const { error } = await supabase
+    .from("owner_settings")
+    .update({
+      work_lat: coords?.lat ?? null,
+      work_lng: coords?.lng ?? null,
+      work_radius_m: radius,
+      gps_required: gpsRequired,
+    })
+    .eq("owner_id", settings.owner_id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin");
+  return { ok: true, savedAt: Date.now() };
 }

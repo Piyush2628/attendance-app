@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Clock, LogOut, Minus, Undo2, X } from "lucide-react";
+import { Check, Clock, LogOut, MapPin, Minus, Undo2, X } from "lucide-react";
 
 import { clearTodayMark, clockOutNow, markToday } from "@/app/admin/actions";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { WorkerAvatar } from "@/components/worker-avatar";
 import type { BoardRow } from "@/lib/admin/data";
 import { formatMinutes } from "@/lib/format";
+import { formatDistance, mapsUrl } from "@/lib/geo";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { AttendanceStatus } from "@/types/database";
@@ -56,7 +57,7 @@ const STATUS_BADGE: Record<AttendanceStatus, { label: string; variant: "present"
   absent: { label: "Absent", variant: "absent" },
 };
 
-export function AttendanceBoard({ rows, timeZone }: { rows: BoardRow[]; timeZone: string }) {
+export function AttendanceBoard({ rows, timeZone, radiusM }: { rows: BoardRow[]; timeZone: string; radiusM: number }) {
   useLiveRefresh();
   const now = useNow();
 
@@ -83,7 +84,7 @@ export function AttendanceBoard({ rows, timeZone }: { rows: BoardRow[]; timeZone
       </div>
       <ul className="grid gap-2">
         {rows.map((row) => (
-          <BoardItem key={row.worker.id} row={row} now={now} timeZone={timeZone} />
+          <BoardItem key={row.worker.id} row={row} now={now} timeZone={timeZone} radiusM={radiusM} />
         ))}
       </ul>
     </div>
@@ -99,7 +100,41 @@ function Stat({ label, value, className }: { label: string; value: number; class
   );
 }
 
-function BoardItem({ row, now, timeZone }: { row: BoardRow; now: number; timeZone: string }) {
+/** Where a punch happened: distance from work (red when outside the allowed distance), links to the map. */
+function PunchPlace({
+  label,
+  lat,
+  lng,
+  distance,
+  radiusM,
+}: {
+  label: string;
+  lat: number | null;
+  lng: number | null;
+  distance: number | null;
+  radiusM: number;
+}) {
+  if (lat == null || lng == null) return null;
+  const far = distance != null && distance > radiusM;
+  return (
+    <a
+      href={mapsUrl(lat, lng)}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "inline-flex items-center gap-0.5 text-xs underline-offset-2 hover:underline",
+        far ? "text-punch-out font-semibold" : "text-muted-foreground",
+      )}
+      title={`${label} location`}
+    >
+      <MapPin className="size-3" />
+      {label} {distance != null ? formatDistance(distance) : "map"}
+      {far && " away"}
+    </a>
+  );
+}
+
+function BoardItem({ row, now, timeZone, radiusM }: { row: BoardRow; now: number; timeZone: string; radiusM: number }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const { worker, log, openLog, state } = row;
@@ -159,6 +194,28 @@ function BoardItem({ row, now, timeZone }: { row: BoardRow; now: number; timeZon
             {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
           </div>
           <div className="text-sm">{detail}</div>
+          {(() => {
+            const punch = state === "in" ? openLog : state === "done" ? log : null;
+            if (!punch || (punch.clock_in_lat == null && punch.clock_out_lat == null)) return null;
+            return (
+              <div className="flex flex-wrap gap-x-3">
+                <PunchPlace
+                  label="In"
+                  lat={punch.clock_in_lat}
+                  lng={punch.clock_in_lng}
+                  distance={punch.clock_in_distance_m}
+                  radiusM={radiusM}
+                />
+                <PunchPlace
+                  label="Out"
+                  lat={punch.clock_out_lat}
+                  lng={punch.clock_out_lng}
+                  distance={punch.clock_out_distance_m}
+                  radiusM={radiusM}
+                />
+              </div>
+            );
+          })()}
           {error && <div className="text-destructive text-xs">{error}</div>}
         </div>
       </div>

@@ -8,6 +8,7 @@ import { ErrorBox } from "@/components/punch/kiosk-app";
 import { OFFLINE_ERROR } from "@/components/punch/messages";
 import { SuccessScreen } from "@/components/punch/success-screen";
 import { WorkerPanel } from "@/components/punch/worker-panel";
+import { punchWithLocation } from "@/components/punch/punch-with-location";
 import { InstallButton } from "@/components/pwa/install-button";
 import { Button } from "@/components/ui/button";
 import type { PunchError, PunchResult, WorkerSummary } from "@/types/database";
@@ -15,15 +16,19 @@ import type { PunchError, PunchResult, WorkerSummary } from "@/types/database";
 /** Worker's own phone, already logged in: just the big button and their history. */
 export function PersonalApp({ initialSummary }: { initialSummary: WorkerSummary }) {
   const [summary, setSummary] = useState(initialSummary);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<false | "punch" | "location">(false);
   const [error, setError] = useState<PunchError | null>(null);
   const [done, setDone] = useState<Extract<PunchResult, { ok: true }> | null>(null);
 
   async function punch() {
-    setBusy(true);
     setError(null);
     try {
-      const res = await workerPunch();
+      const res = await punchWithLocation(
+        summary.gps_required,
+        workerPunch,
+        () => setBusy("location"),
+        () => setBusy("punch"),
+      );
       if (res.ok) {
         setDone(res);
         setSummary(res.summary);

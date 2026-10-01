@@ -1,5 +1,6 @@
 import { AttendanceBoard } from "@/components/admin/attendance-board";
 import { PunchLinkCard } from "@/components/admin/punch-link-card";
+import { WorkLocationCard } from "@/components/admin/work-location-card";
 import { getTodayBoard } from "@/lib/admin/data";
 
 export const metadata = { title: "Today" };
@@ -19,8 +20,9 @@ export default async function AdminHome() {
         <h1 className="text-2xl font-bold">Today</h1>
         <p className="text-muted-foreground text-sm">{dateLabel}</p>
       </div>
-      <AttendanceBoard rows={rows} timeZone={settings.timezone} />
+      <AttendanceBoard rows={rows} timeZone={settings.timezone} radiusM={settings.work_radius_m} />
       <PunchLinkCard kioskCode={settings.kiosk_code} />
+      <WorkLocationCard settings={settings} />
     </div>
   );
 }

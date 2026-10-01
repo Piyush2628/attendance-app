@@ -12,7 +12,7 @@ import {
   setKioskCode,
   setWorkerToken,
 } from "@/lib/worker-session";
-import type { KioskWorkerList, LoginResult, PunchError, PunchResult, WorkerSummary } from "@/types/database";
+import type { GeoFix, KioskWorkerList, LoginResult, PunchError, PunchResult, WorkerSummary } from "@/types/database";
 
 const noCode: PunchError = { ok: false, error: "invalid_code" };
 const noSession: PunchError = { ok: false, error: "invalid_session" };
@@ -21,6 +21,12 @@ async function rpc<T>(fn: Parameters<ReturnType<typeof createAnonClient>["rpc"]>
   const { data, error } = await createAnonClient().rpc(fn, args as never);
   if (error) throw new Error(error.message);
   return data as T;
+}
+
+/** Location args for the punch RPCs; the database ignores anything that isn't a real coordinate. */
+function locationArgs(fix: GeoFix | null | undefined) {
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return { p_lat: num(fix?.lat), p_lng: num(fix?.lng), p_accuracy: num(fix?.accuracy) };
 }
 
 // ---- Kiosk (shared tablet) ---------------------------------------------------
@@ -37,10 +43,10 @@ export async function kioskVerify(workerId: string, pin: string): Promise<Worker
   return rpc("kiosk_verify_pin", { p_kiosk_code: code, p_worker_id: workerId, p_pin: pin });
 }
 
-export async function kioskPunch(workerId: string, pin: string): Promise<PunchResult> {
+export async function kioskPunch(workerId: string, pin: string, fix?: GeoFix | null): Promise<PunchResult> {
   const code = await getKioskCode();
   if (!code) return noCode;
-  return rpc("kiosk_punch", { p_kiosk_code: code, p_worker_id: workerId, p_pin: pin });
+  return rpc("kiosk_punch", { p_kiosk_code: code, p_worker_id: workerId, p_pin: pin, ...locationArgs(fix) });
 }
 
 // ---- Business code -----------------------------------------------------------
@@ -75,10 +81,10 @@ export async function workerLogin(phone: string, pin: string): Promise<LoginResu
   return result.ok ? { ...result, token: "" } : result;
 }
 
-export async function workerPunch(): Promise<PunchResult> {
+export async function workerPunch(fix?: GeoFix | null): Promise<PunchResult> {
   const token = await getWorkerToken();
   if (!token) return noSession;
-  return rpc("worker_punch", { p_token: token });
+  return rpc("worker_punch", { p_token: token, ...locationArgs(fix) });
 }
 
 export async function workerStatus(): Promise<WorkerSummary | PunchError> {

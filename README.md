@@ -14,7 +14,8 @@ Supabase.
 ## Getting started
 
 1. Create a free Supabase project.
-2. Run `supabase/migrations/01_schema.sql` in the SQL editor (or `supabase db push` with the CLI).
+2. Run each file in `supabase/migrations/` in order, pasting its contents into the SQL editor
+   (or `supabase db push` with the CLI).
 3. `cp .env.example .env.local` and fill in the project URL and anon key.
 4. `npm install && npm run dev`, then open http://localhost:3000.
 
@@ -23,12 +24,14 @@ Supabase.
 ```
 supabase/
   migrations/01_schema.sql     tables, enums, triggers, RLS, RPCs (step 1)
+  migrations/02_admin.sql      business name on sign-up, worker-photos bucket (step 2)
   tests/                       plain-Postgres behaviour tests for the migration
 src/
   proxy.ts                     refreshes the owner's session, guards /admin
   app/
     manifest.ts                PWA manifest (step 5)
-    login/                     owner email + password sign-in (step 2)
+    login/                     owner sign-in and sign-up (step 2)
+    auth/confirm/              sign-up email confirmation link
     admin/                     owner dashboard: live board (step 2)
       workers/                 add / edit workers, set PINs (step 2)
       khata/                   cash advances (step 2)
@@ -90,3 +93,14 @@ npm run db:test
 
 It creates a scratch database, loads a small stand-in for Supabase's `auth` schema and roles,
 applies the migration and runs `supabase/tests/schema_test.sql`.
+
+## Email confirmation
+
+Supabase asks new owners to confirm their email. For the link to sign them straight in, set
+Auth → Email Templates → "Confirm signup" to link to:
+
+```
+{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/admin
+```
+
+and set Auth → URL Configuration → Site URL to your Vercel URL.

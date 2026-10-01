@@ -104,6 +104,12 @@
   .no-print {
     display: none !important;
   }
+  body {
+    background: white;
+    /* Keep the green/red net payable box and status colours on paper */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }
 
 @keyframes shake {

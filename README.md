@@ -36,17 +36,18 @@ src/
     admin/                     owner dashboard: live board (step 2)
       workers/                 add / edit workers, set PINs (step 2)
       khata/                   cash advances (step 2)
-      payroll/                 salary report (step 4)
-      payroll/[workerId]/      printable salary slip (step 4)
+      payroll/                 salary report, ?from=&to= (default: this month)
+      payroll/[workerId]/      printable A4 / phone salary slip
     punch/                     worker kiosk + personal phone mode (step 3)
     punch/login/               one-time phone + PIN login on a worker's own phone
   components/
     ui/                        shadcn/ui primitives
-    admin/  punch/             feature components
+    admin/  punch/  payroll/   feature components
   lib/
     supabase/                  browser, server and proxy clients
     worker-session.ts          httpOnly cookie for personal-mode worker sessions
     format.ts                  minutes, rupees, month ranges
+    admin/period.ts            pay period from ?from=&to=
   types/database.ts            typed schema + RPC result shapes
 ```
 
@@ -85,6 +86,15 @@ Workers have no Supabase Auth account and the `anon` role cannot read any table.
   so even the admin dashboard can't read it.
 - 5 wrong PINs lock that worker for 15 minutes.
 - Session tokens are stored only as SHA-256 hashes.
+
+## Payroll and salary slips
+
+**Payroll** shows every worker for a month (arrows) or any date range up to a year: days
+present, half days, OT hours, gross pay, advances deducted and net payable, with totals.
+Shifts that are still clocked in are left out and flagged. **Slip** opens one worker's salary
+slip with the pay worked out line by line, each advance, and every day's in/out times. Print
+gives a clean A4 page with signature and thumb-impression lines; WhatsApp opens a chat with the
+worker (or a contact picker if no phone is saved) with the summary filled in.
 
 ## Pay rules (in `payroll_report`)
 

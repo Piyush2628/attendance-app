@@ -113,7 +113,8 @@ photos; tap one to open it.
 
 ## Correcting attendance
 
-On the Attendance page, the pencil next to a day edits its in/out times (in the business time
+On the Today page, the bin icon deletes an employee's entry for today (tap twice). On the Attendance page
+and on each salary slip, the pencil next to a day edits its in/out times (in the business time
 zone; an out time before the in time is the next morning), sets a fixed status, adds a note, or
 deletes the day. "Add day" enters a day that has no punch.
 
@@ -178,6 +179,12 @@ pay. (The `advances` table and the `advances_total` / `net_payable` columns of `
 are still in the database, unused.) A day's status is set when the employee
 clocks out, by the work timing rules above. Off days are left out. The owner's manual mark
 always wins.
+
+## Speed
+
+`vercel.json` runs the server functions in Seoul (`icn1`), the same region as the Supabase project
+(`ap-northeast-2`). Each page makes a few database calls, so keeping them in one region matters
+far more than anything else. If the Supabase project ever moves, change the region to match.
 
 ## Database tests
 

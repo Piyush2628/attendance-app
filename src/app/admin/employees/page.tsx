@@ -106,7 +106,7 @@ function WorkerCard({
       <div className="flex shrink-0 flex-col items-end gap-1">
         <div className="flex gap-1">
           <Button asChild variant="outline" size="sm" aria-label={`Attendance of ${worker.name}`}>
-            <Link href={`/admin/attendance?e=${worker.id}`}>
+            <Link href={`/admin/attendance?e=${worker.id}`} prefetch={false}>
               <CalendarDays />
             </Link>
           </Button>

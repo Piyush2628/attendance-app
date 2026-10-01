@@ -64,7 +64,7 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
           <ul className="grid grid-cols-1 gap-2 md:hidden print:hidden" data-testid="payroll-cards">
             {rows.map((r) => (
               <li key={r.worker_id}>
-                <Link href={slipHref(r.worker_id)} className="block rounded-xl border p-3 active:bg-muted">
+                <Link href={slipHref(r.worker_id)} prefetch={false} className="block rounded-xl border p-3 active:bg-muted">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate font-semibold">{r.worker_name}</div>
@@ -119,7 +119,7 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
                     <td className="p-2 text-right font-semibold tabular-nums">{money(r.gross_pay)}</td>
                     <td className="no-print p-2 text-right">
                       <Button asChild size="sm" variant="secondary">
-                        <Link href={slipHref(r.worker_id)}>
+                        <Link href={slipHref(r.worker_id)} prefetch={false}>
                           <FileText /> Slip
                         </Link>
                       </Button>

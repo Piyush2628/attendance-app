@@ -27,8 +27,8 @@ export function AuthForm({ next, notice }: { next?: string; notice?: Notice }) {
         <CardTitle className="text-2xl">{mode === "signin" ? "Owner sign in" : "Create account"}</CardTitle>
         <CardDescription>
           {mode === "signin"
-            ? "Manage workers, attendance and salary."
-            : "One account per business. Workers don't need one."}
+            ? "Manage employees, attendance and salary."
+            : "One account per business. Employees don't need one."}
         </CardDescription>
       </CardHeader>
       <CardContent>

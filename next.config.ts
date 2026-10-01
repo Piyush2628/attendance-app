@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    // "Workers" was renamed to "Employees"; keep old bookmarks working.
+    return [{ source: "/admin/workers", destination: "/admin/employees", permanent: true }];
+  },
   async headers() {
     return [
       {

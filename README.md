@@ -1,7 +1,7 @@
 # Attendance & Salary
 
 Attendance and payroll for small businesses, workshops and daily-wage / contract staff.
-Workers clock in and out with a 4-digit PIN; the owner sees who is in today, records cash
+Employees clock in and out with a 4-digit PIN; the owner sees who is in today, records cash
 advances (udhari) and prints salary slips. Runs entirely on free tiers: Next.js on Vercel and
 Supabase.
 
@@ -21,6 +21,10 @@ Supabase.
 
 ## Layout
 
+Screens say "employee" everywhere. The database and code still use `worker` in table, column and
+function names (`workers`, `worker_id`, `worker_login`, …), so no migration was needed for the
+rename.
+
 ```
 supabase/
   migrations/01_schema.sql     tables, enums, triggers, RLS, RPCs (step 1)
@@ -34,7 +38,7 @@ src/
     login/                     owner sign-in and sign-up (step 2)
     auth/confirm/              sign-up email confirmation link
     admin/                     owner dashboard: live board (step 2)
-      workers/                 add / edit workers, set PINs (step 2)
+      employees/               add / edit employees, set PINs
       khata/                   cash advances (step 2)
       payroll/                 salary report, ?from=&to= (default: this month)
       payroll/[workerId]/      printable A4 / phone salary slip
@@ -57,8 +61,8 @@ Open the link from the owner's dashboard (`/punch?k=CODE`) once on each device. 
 remembered in a cookie and removed from the address bar, so "Add to Home Screen" opens straight
 to the punch screen.
 
-- **Shared tablet:** worker taps their photo, enters their PIN, taps the big green CLOCK IN or
-  red CLOCK OUT button, sees a full-screen confirmation for 3 seconds. A worker's screen goes
+- **Shared tablet:** employee taps their photo, enters their PIN, taps the big green CLOCK IN or
+  red CLOCK OUT button, sees a full-screen confirmation for 3 seconds. An employee's screen goes
   back to the photo grid after 20 seconds without a tap.
 - **Own phone:** "On your own phone? Log in once here" asks for phone number and PIN, then the
   phone stays logged in for 90 days (httpOnly cookie; changing the PIN logs it out).
@@ -80,37 +84,37 @@ banner appears, a punch attempt says nothing was saved, and pages that can't loa
 attendance and pay always come fresh from the database. The service worker only runs in
 production builds (`npm run build && npm start`), not in `npm run dev`.
 
-## How worker PINs stay safe
+## How employee PINs stay safe
 
-Workers have no Supabase Auth account and the `anon` role cannot read any table. Everything on
+Employees have no Supabase Auth account and the `anon` role cannot read any table. Everything on
 `/punch` goes through `SECURITY DEFINER` functions:
 
 | Function | Who | What it returns |
 | --- | --- | --- |
-| `kiosk_list_workers(code)` | anon | business name + each worker's name, photo, clocked-in flag |
-| `kiosk_verify_pin(code, worker, pin)` | anon | that worker's today + last 7 days |
+| `kiosk_list_workers(code)` | anon | business name + each employee's name, photo, clocked-in flag |
+| `kiosk_verify_pin(code, worker, pin)` | anon | that employee's today + last 7 days |
 | `kiosk_punch(code, worker, pin)` | anon | clock in or out, then the summary |
 | `worker_login(code, phone, pin)` | anon | a 90-day session token for a personal phone |
 | `worker_status(token)` / `worker_punch(token)` / `worker_logout(token)` | anon | same, by token |
 | `set_worker_pin(worker, pin)` | owner | sets a bcrypt hash, clears lockout, logs out phones |
 | `mark_attendance(worker, date, status)` | owner | manual Present / Half Day / Absent |
-| `payroll_report(start, end)` | owner | one payroll row per worker |
+| `payroll_report(start, end)` | owner | one payroll row per employee |
 
 - `code` is the owner's `owner_settings.kiosk_code`, a random 10-character code shared as a link
-  (`/punch?k=CODE`) or QR. Without it nobody can even list a business's workers.
+  (`/punch?k=CODE`) or QR. Without it nobody can even list a business's employees.
 - PINs are bcrypt-hashed with pgcrypto. `pin_hash` is excluded from the owner's column grants,
   so even the admin dashboard can't read it.
-- 5 wrong PINs lock that worker for 15 minutes.
+- 5 wrong PINs lock that employee for 15 minutes.
 - Session tokens are stored only as SHA-256 hashes.
 
 ## Payroll and salary slips
 
-**Payroll** shows every worker for a month (arrows) or any date range up to a year: days
+**Payroll** shows every employee for a month (arrows) or any date range up to a year: days
 present, half days, OT hours, gross pay, advances deducted and net payable, with totals.
-Shifts that are still clocked in are left out and flagged. **Slip** opens one worker's salary
+Shifts that are still clocked in are left out and flagged. **Slip** opens one employee's salary
 slip with the pay worked out line by line, each advance, and every day's in/out times. Print
 gives a clean A4 page with signature and thumb-impression lines; WhatsApp opens a chat with the
-worker (or a contact picker if no phone is saved) with the summary filled in.
+employee (or a contact picker if no phone is saved) with the summary filled in.
 
 ## Pay rules (in `payroll_report`)
 
@@ -120,7 +124,7 @@ worker (or a contact picker if no phone is saved) with the summary filled in.
 | Hourly | regular hours × hourly rate | OT hours × OT rate (hourly rate if OT rate is 0) |
 | Monthly | present = salary ÷ days in month, half day = 50% of that | OT hours × OT rate |
 
-Net payable = gross − advances dated in the same range. A day's status is set when the worker
+Net payable = gross − advances dated in the same range. A day's status is set when the employee
 clocks out: a full shift is present, at least half a shift is half day, less is absent. The
 owner's manual mark always wins.
 

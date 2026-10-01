@@ -7,7 +7,7 @@ import { requireOwner } from "@/lib/admin/data";
 
 const nav = [
   { href: "/admin", label: "Today", icon: LayoutDashboard },
-  { href: "/admin/workers", label: "Workers", icon: Users },
+  { href: "/admin/employees", label: "Employees", icon: Users },
   { href: "/admin/khata", label: "Khata", icon: BookOpenText },
   { href: "/admin/payroll", label: "Payroll", icon: IndianRupee },
 ] as const;

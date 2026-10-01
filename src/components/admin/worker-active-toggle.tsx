@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { UserCheck, UserX } from "lucide-react";
 
-import { setWorkerActive } from "@/app/admin/workers/actions";
+import { setWorkerActive } from "@/app/admin/employees/actions";
 import { Button } from "@/components/ui/button";
 
 export function WorkerActiveToggle({ workerId, active, name }: { workerId: string; active: boolean; name: string }) {

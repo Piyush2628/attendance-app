@@ -106,6 +106,11 @@ do $$ begin
   raise exception 'FAILED: anon read workers';
 exception when insufficient_privilege then raise notice 'ok - anon cannot read tables';
 end $$;
+do $$ begin
+  perform set_worker_pin('11111111-0000-0000-0000-000000000001', '0000');
+  raise exception 'FAILED: anon can call set_worker_pin';
+exception when insufficient_privilege then raise notice 'ok - anon cannot call owner functions';
+end $$;
 select pg_temp.check((kiosk_list_workers('nope')->>'error') = 'invalid_code', 'bad kiosk code');
 select pg_temp.check(jsonb_array_length(kiosk_list_workers('shopa12345')->'workers') = 3, 'kiosk lists 3 workers');
 select pg_temp.check(not (kiosk_list_workers('SHOPA12345')::text like '%pin%' or kiosk_list_workers('SHOPA12345')::text like '%rate%'),

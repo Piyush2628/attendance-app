@@ -25,6 +25,7 @@ Supabase.
 supabase/
   migrations/01_schema.sql     tables, enums, triggers, RLS, RPCs (step 1)
   migrations/02_admin.sql      business name on sign-up, worker-photos bucket (step 2)
+  migrations/03_function_grants.sql  owner-only functions not callable by anon
   tests/                       plain-Postgres behaviour tests for the migration
 src/
   proxy.ts                     refreshes the owner's session, guards /admin
@@ -38,6 +39,7 @@ src/
       payroll/                 salary report (step 4)
       payroll/[workerId]/      printable salary slip (step 4)
     punch/                     worker kiosk + personal phone mode (step 3)
+    punch/login/               one-time phone + PIN login on a worker's own phone
   components/
     ui/                        shadcn/ui primitives
     admin/  punch/             feature components
@@ -47,6 +49,19 @@ src/
     format.ts                  minutes, rupees, month ranges
   types/database.ts            typed schema + RPC result shapes
 ```
+
+## The punch screen
+
+Open the link from the owner's dashboard (`/punch?k=CODE`) once on each device. The code is
+remembered in a cookie and removed from the address bar, so "Add to Home Screen" opens straight
+to the punch screen.
+
+- **Shared tablet:** worker taps their photo, enters their PIN, taps the big green CLOCK IN or
+  red CLOCK OUT button, sees a full-screen confirmation for 3 seconds. A worker's screen goes
+  back to the photo grid after 20 seconds without a tap.
+- **Own phone:** "On your own phone? Log in once here" asks for phone number and PIN, then the
+  phone stays logged in for 90 days (httpOnly cookie; changing the PIN logs it out).
+- Labels have a short Hindi line under the English.
 
 ## How worker PINs stay safe
 

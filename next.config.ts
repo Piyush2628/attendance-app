@@ -3,7 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   async redirects() {
     // "Workers" was renamed to "Employees"; keep old bookmarks working.
-    return [{ source: "/admin/workers", destination: "/admin/employees", permanent: true }];
+    return [
+      { source: "/admin/workers", destination: "/admin/employees", permanent: true },
+      // Advances (khata) now live on the Payroll page.
+      { source: "/admin/khata", destination: "/admin/payroll", permanent: true },
+    ];
   },
   async headers() {
     return [

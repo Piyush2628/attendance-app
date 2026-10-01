@@ -1,13 +1,17 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { isoDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceLog, OwnerSettings, Worker } from "@/types/database";
 
-/** Supabase client + the signed-in owner's settings. Redirects to /login if signed out. */
-export async function requireOwner() {
+/**
+ * Supabase client + the signed-in owner's settings. Redirects to /login if signed out.
+ * Cached per request, so the layout and the page share one auth check and one settings read.
+ */
+export const requireOwner = cache(async () => {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   if (!claims?.claims?.sub) redirect("/login");
@@ -19,7 +23,7 @@ export async function requireOwner() {
   if (!settings) throw new Error("Owner settings missing. Was 01_schema.sql applied?");
 
   return { supabase, settings, today: isoDate(new Date(), settings.timezone) };
-}
+});
 
 export type BoardState = "in" | "done" | "marked" | "not_in";
 

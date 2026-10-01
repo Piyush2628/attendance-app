@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Clock, LogOut, MapPin, Minus, Undo2, X } from "lucide-react";
 
@@ -76,13 +77,13 @@ export function AttendanceBoard({ rows, timeZone, radiusM }: { rows: BoardRow[];
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <div className="grid grid-cols-3 gap-2 text-center">
         <Stat label="Working now" value={counts.in} className="bg-punch-in/10 text-punch-in" />
         <Stat label="Clocked out" value={counts.done} className="bg-sky-500/10 text-sky-700" />
         <Stat label="Not in" value={counts.notIn} className="bg-punch-out/10 text-punch-out" />
       </div>
-      <ul className="grid gap-2">
+      <ul className="grid grid-cols-1 gap-2">
         {rows.map((row) => (
           <BoardItem key={row.worker.id} row={row} now={now} timeZone={timeZone} radiusM={radiusM} />
         ))}
@@ -190,7 +191,9 @@ function BoardItem({ row, now, timeZone, radiusM }: { row: BoardRow; now: number
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate font-semibold">{worker.name}</span>
+            <Link href={`/admin/attendance?e=${worker.id}`} className="truncate font-semibold underline-offset-2 hover:underline">
+              {worker.name}
+            </Link>
             {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
           </div>
           <div className="text-sm">{detail}</div>

@@ -9,5 +9,5 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Only admin pages and the login page need the Supabase session.
   // /punch is cookie-free for Supabase Auth (workers use PIN sessions).
-  matcher: ["/admin/:path*", "/login"],
+  matcher: ["/admin/:path*", "/login", "/auth/:path*"],
 };

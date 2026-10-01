@@ -22,12 +22,20 @@ export type Database = {
           kiosk_code: string;
           currency: string;
           created_at: string;
+          work_lat: number | null;
+          work_lng: number | null;
+          work_radius_m: number;
+          gps_required: boolean;
         };
         Insert: never;
         Update: {
           business_name?: string;
           timezone?: string;
           currency?: string;
+          work_lat?: number | null;
+          work_lng?: number | null;
+          work_radius_m?: number;
+          gps_required?: boolean;
         };
         Relationships: [];
       };
@@ -89,6 +97,14 @@ export type Database = {
           notes: string | null;
           created_at: string;
           updated_at: string;
+          clock_in_lat: number | null;
+          clock_in_lng: number | null;
+          clock_in_accuracy_m: number | null;
+          clock_in_distance_m: number | null;
+          clock_out_lat: number | null;
+          clock_out_lng: number | null;
+          clock_out_accuracy_m: number | null;
+          clock_out_distance_m: number | null;
         };
         Insert: {
           id?: string;
@@ -177,7 +193,7 @@ export type Database = {
         Returns: Json;
       };
       kiosk_punch: {
-        Args: { p_kiosk_code: string; p_worker_id: string; p_pin: string };
+        Args: { p_kiosk_code: string; p_worker_id: string; p_pin: string } & PunchLocationArgs;
         Returns: Json;
       };
       worker_login: {
@@ -185,7 +201,7 @@ export type Database = {
         Returns: Json;
       };
       worker_status: { Args: { p_token: string }; Returns: Json };
-      worker_punch: { Args: { p_token: string }; Returns: Json };
+      worker_punch: { Args: { p_token: string } & PunchLocationArgs; Returns: Json };
       worker_logout: { Args: { p_token: string }; Returns: undefined };
     };
     Enums: {
@@ -202,6 +218,12 @@ export type Advance = Database["public"]["Tables"]["advances"]["Row"];
 export type OwnerSettings = Database["public"]["Tables"]["owner_settings"]["Row"];
 
 // ---- RPC result shapes (jsonb functions) -------------------------------------
+
+/** Device location sent with a punch (04_gps.sql). All null when not sent. */
+type PunchLocationArgs = { p_lat?: number | null; p_lng?: number | null; p_accuracy?: number | null };
+
+/** A browser geolocation fix. */
+export type GeoFix = { lat: number; lng: number; accuracy: number };
 
 export type PayrollRow = {
   worker_id: string;
@@ -228,19 +250,32 @@ export type PunchErrorCode =
   | "no_pin"
   | "invalid_session"
   | "already_done_today"
+  // GPS check (04_gps.sql)
+  | "location_needed"
+  | "outside_area"
+  | "location_weak"
   // Client-side only: the request never reached the server (no internet).
-  | "offline";
+  | "offline"
+  // Client-side only: the browser would not give a location.
+  | "location_denied"
+  | "location_unavailable";
 
 export type PunchError = {
   ok: false;
   error: PunchErrorCode;
   attempts_left?: number;
   locked_until?: string;
+  /** outside_area / location_weak: how far the punch was from work. */
+  distance_m?: number;
+  radius_m?: number;
+  accuracy_m?: number | null;
 };
 
 export type WorkerSummary = {
   ok: true;
   worker: { id: string; name: string; photo_url: string | null; standard_shift_hours: number };
+  /** The owner turned on the GPS check: send a location with every punch. */
+  gps_required: boolean;
   clocked_in: boolean;
   clock_in_at: string | null;
   today_minutes: number;
@@ -259,6 +294,7 @@ export type KioskWorkerList =
   | {
       ok: true;
       business_name: string;
+      gps_required: boolean;
       workers: { id: string; name: string; photo_url: string | null; clocked_in: boolean }[];
     }
   | PunchError;

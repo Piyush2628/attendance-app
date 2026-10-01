@@ -30,6 +30,7 @@ supabase/
   migrations/01_schema.sql     tables, enums, triggers, RLS, RPCs (step 1)
   migrations/02_admin.sql      business name on sign-up, worker-photos bucket (step 2)
   migrations/03_function_grants.sql  owner-only functions not callable by anon
+  migrations/04_gps.sql        work location + radius, location stored on each punch
   tests/                       plain-Postgres behaviour tests for the migration
 src/
   proxy.ts                     refreshes the owner's session, guards /admin
@@ -67,6 +68,20 @@ to the punch screen.
 - **Own phone:** "On your own phone? Log in once here" asks for phone number and PIN, then the
   phone stays logged in for 90 days (httpOnly cookie; changing the PIN logs it out).
 - Labels have a short Hindi line under the English.
+
+## Location check (GPS)
+
+Off by default. On the Today page, the owner stands at the workplace, taps "Use my current
+location" (or pastes coordinates from Google Maps), picks an allowed distance (200 m is a good
+start) and ticks "Check location when employees punch".
+
+- With the check on, every clock-in and clock-out, on the tablet or an employee's own phone,
+  sends the browser's GPS fix. `do_punch` refuses it when it is farther than the allowed distance
+  plus the fix's accuracy (counted up to 100 m), and refuses a punch with no location.
+- Every punch that sent a location stores it (`clock_in_lat`, `clock_in_distance_m`, …). The Today
+  board shows "In 44 m", linking to the spot on Google Maps, in red when outside the distance.
+- The browser's location can be faked with mock-GPS apps. This check stops the everyday case
+  (punching from home or on the way), not a determined cheat.
 
 ## Installing on phones and tablets
 

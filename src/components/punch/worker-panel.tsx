@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, LogIn, LogOut } from "lucide-react";
+import { Loader2, LogIn, LogOut, MapPin } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { WorkerAvatar } from "@/components/worker-avatar";
@@ -45,7 +45,8 @@ export function WorkerPanel({
   footer,
 }: {
   summary: WorkerSummary;
-  busy: boolean;
+  /** "location" while waiting for a GPS fix, "punch" while saving. */
+  busy: false | "punch" | "location";
   onPunch: () => void;
   footer?: React.ReactNode;
 }) {
@@ -68,11 +69,14 @@ export function WorkerPanel({
         variant={clockedIn ? "punchOut" : "punchIn"}
         size="giant"
         className="h-48 flex-col gap-1"
-        disabled={busy}
+        disabled={Boolean(busy)}
         onClick={onPunch}
       >
         {busy ? (
-          <Loader2 className="size-14 animate-spin" />
+          <>
+            <Loader2 className="size-14 animate-spin" />
+            {busy === "location" && <span className="text-xl font-semibold">Finding your location…</span>}
+          </>
         ) : (
           <>
             <span className="flex items-center gap-3">
@@ -83,6 +87,11 @@ export function WorkerPanel({
           </>
         )}
       </Button>
+      {summary.gps_required && (
+        <p className="text-muted-foreground -mt-2 flex items-center gap-1 text-sm">
+          <MapPin className="size-4" /> Punch from the workplace · काम की जगह से ही पंच करें
+        </p>
+      )}
 
       <div className="bg-muted w-full rounded-2xl p-4 text-center">
         <div className="text-muted-foreground text-sm font-medium">Today&apos;s hours · आज</div>

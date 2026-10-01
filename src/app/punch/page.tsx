@@ -24,7 +24,10 @@ export default async function PunchPage() {
   if (code) {
     const { data } = await supabase.rpc("kiosk_list_workers", { p_kiosk_code: code });
     const list = data as KioskWorkerList | null;
-    if (list?.ok) return <KioskApp businessName={list.business_name} initialWorkers={list.workers} />;
+    if (list?.ok)
+      return (
+        <KioskApp businessName={list.business_name} initialWorkers={list.workers} gpsRequired={list.gps_required} />
+      );
     return (
       <Centered>
         <BusinessCodeForm initialError="This device's business code no longer works. Enter the new one." />

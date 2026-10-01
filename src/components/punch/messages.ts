@@ -1,3 +1,4 @@
+import { formatDistance } from "@/lib/geo";
 import type { PunchError } from "@/types/database";
 
 /** A server action that threw (network down, server unreachable). */
@@ -27,6 +28,24 @@ export function errorMessage(err: PunchError): { en: string; hi: string } {
       return { en: "Please log in again.", hi: "फिर से लॉगिन करें" };
     case "invalid_code":
       return { en: "This device is not set up. Ask the owner for the link.", hi: "मालिक से लिंक लें" };
+    case "outside_area":
+      return {
+        en: `You are ${err.distance_m != null ? formatDistance(err.distance_m) : "too far"} away from work. Punch from the workplace.`,
+        hi: "आप काम की जगह से दूर हैं",
+      };
+    case "location_weak":
+      return {
+        en: "Your location is not clear. Turn on GPS, go near a window or outside, and try again.",
+        hi: "लोकेशन साफ़ नहीं है, GPS चालू करके फिर कोशिश करें",
+      };
+    case "location_denied":
+      return {
+        en: "Location is blocked. Allow location for this site in the browser settings, then try again.",
+        hi: "लोकेशन की इजाज़त दें, फिर कोशिश करें",
+      };
+    case "location_needed":
+    case "location_unavailable":
+      return { en: "Could not find your location. Turn on GPS and try again.", hi: "GPS चालू करके फिर कोशिश करें" };
     case "offline":
       return { en: "No internet. Nothing was saved. Try again when it's back.", hi: "इंटरनेट नहीं है, फिर से कोशिश करें" };
   }

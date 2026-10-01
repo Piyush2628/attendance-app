@@ -139,4 +139,60 @@ select worker_logout(r->>'token') from t;
 select pg_temp.check((select (worker_status(r->>'token')->>'error') = 'invalid_session' from t), 'logout invalidates token');
 reset role;
 
+-- ---- GPS check (04_gps.sql) -----------------------------------------------------
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select set_worker_pin('11111111-0000-0000-0000-000000000003', '5555');
+do $$ begin
+  update owner_settings set gps_required = true;
+  raise exception 'FAILED: GPS check turned on without a work location';
+exception when check_violation then raise notice 'ok - GPS check needs a work location';
+end $$;
+-- Work spot in Delhi, 200 m radius.
+update owner_settings set work_lat = 28.6139, work_lng = 77.2090, work_radius_m = 200, gps_required = true;
+select pg_temp.check((select gps_required and work_radius_m = 200 from owner_settings), 'owner saves work location');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+update owner_settings set gps_required = false
+ where owner_id = '00000000-0000-0000-0000-00000000000a';
+reset role;
+select pg_temp.check((select gps_required from owner_settings where owner_id = '00000000-0000-0000-0000-00000000000a'),
+                     'B cannot change A''s GPS setting');
+
+set role anon;
+select pg_temp.check((kiosk_list_workers('SHOPA12345')->>'gps_required')::boolean, 'kiosk list says GPS is on');
+select pg_temp.check((kiosk_verify_pin('SHOPA12345', '11111111-0000-0000-0000-000000000003', '5555')->>'gps_required')::boolean,
+                     'worker summary says GPS is on');
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000003', '5555')->>'error') = 'location_needed',
+                     'punch without location refused');
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000003', '5555', 999, 77.2090, 10)->>'error') = 'location_needed',
+                     'nonsense latitude treated as no location');
+create temp table far as
+  select kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000003', '5555', 28.6229, 77.2090, 20) as r;
+select pg_temp.check((select r->>'error' = 'outside_area' and (r->>'distance_m')::int between 990 and 1010
+                        and (r->>'radius_m')::int = 200 from far), 'punch 1 km away refused with distance');
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000003', '5555', 28.6229, 77.2090, 1500)->>'error') = 'location_weak',
+                     'fuzzy fix that might be inside asks to retry');
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000003', '5555', 28.6159, 77.2090, 80)->>'action') = 'clock_in',
+                     '222 m away with 80 m accuracy is allowed');
+reset role;
+select pg_temp.check((select clock_in_distance_m between 215 and 230 and clock_in_accuracy_m = 80
+                        and clock_in_lat = 28.6159 and clock_out_lat is null
+                      from attendance_logs where worker_id = '11111111-0000-0000-0000-000000000003'
+                        and clock_in is not null and clock_out is null),
+                     'clock-in location and distance stored');
+set role anon;
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000003', '5555', 28.7, 77.3, 15)->>'error') = 'outside_area',
+                     'clock out from far away refused');
+reset role;
+update owner_settings set gps_required = false where owner_id = '00000000-0000-0000-0000-00000000000a';
+set role anon;
+select pg_temp.check((kiosk_punch('SHOPA12345', '11111111-0000-0000-0000-000000000003', '5555')->>'action') = 'clock_out',
+                     'GPS off: punch without location works');
+reset role;
+select pg_temp.check((select clock_out is not null and clock_out_lat is null and clock_out_distance_m is null
+                      from attendance_logs where worker_id = '11111111-0000-0000-0000-000000000003'
+                        and clock_in_lat is not null), 'no location stored when none sent');
+select pg_temp.check(not exists (select 1 from pg_proc where proname in ('kiosk_punch', 'worker_punch', 'do_punch') and pronargs < 4),
+                     'old punch functions dropped');
+
 \echo ALL TESTS PASSED

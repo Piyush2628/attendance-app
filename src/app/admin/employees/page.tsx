@@ -6,7 +6,7 @@ import { requireOwner } from "@/lib/admin/data";
 import { formatMoney } from "@/lib/format";
 import type { Worker } from "@/types/database";
 
-export const metadata = { title: "Workers" };
+export const metadata = { title: "Employees" };
 
 function payLine(w: Worker) {
   const base =
@@ -35,7 +35,7 @@ export default async function WorkersPage() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Workers</h1>
+          <h1 className="text-2xl font-bold">Employees</h1>
           <p className="text-muted-foreground text-sm">{active.length} active</p>
         </div>
         <WorkerFormDialog ownerId={settings.owner_id} />
@@ -43,7 +43,7 @@ export default async function WorkersPage() {
 
       {workers.length === 0 && (
         <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center">
-          Add your first worker to get started.
+          Add your first employee to get started.
         </p>
       )}
 
@@ -56,7 +56,7 @@ export default async function WorkersPage() {
       {inactive.length > 0 && (
         <details className="mt-4">
           <summary className="text-muted-foreground cursor-pointer text-sm">
-            Inactive workers ({inactive.length})
+            Inactive employees ({inactive.length})
           </summary>
           <ul className="mt-2 grid gap-2 opacity-70 md:grid-cols-2">
             {inactive.map((w) => (

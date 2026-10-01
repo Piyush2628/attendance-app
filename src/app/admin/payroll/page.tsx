@@ -27,7 +27,7 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
         <div>
           <h1 className="text-2xl font-bold">Payroll</h1>
           <p className="text-muted-foreground text-sm">
-            <span className="no-print">Salary for each worker, after advances (udhari).</span>
+            <span className="no-print">Salary for each employee, after advances (udhari).</span>
             <span className="hidden print:inline">
               {settings.business_name} · {period.label}
             </span>
@@ -56,7 +56,7 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
 
       {rows.length === 0 ? (
         <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center">
-          No workers yet. Add workers to see their salary here.
+          No employees yet. Add employees to see their salary here.
         </p>
       ) : (
         <>
@@ -99,7 +99,7 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
             <table className="w-full text-sm" data-testid="payroll-table">
               <thead className="bg-muted/50 text-left">
                 <tr>
-                  <th className="p-2 font-medium">Worker Name</th>
+                  <th className="p-2 font-medium">Employee Name</th>
                   <th className="p-2 font-medium">Type</th>
                   <th className="p-2 text-right font-medium">Days Present</th>
                   <th className="p-2 text-right font-medium">Half Days</th>
@@ -157,7 +157,7 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
           </div>
           {rows.some((r) => r.net_payable < 0) && (
             <p className="text-muted-foreground text-sm">
-              A negative net means the advances are more than the salary for this period; the worker still owes the
+              A negative net means the advances are more than the salary for this period; the employee still owes the
               difference.
             </p>
           )}

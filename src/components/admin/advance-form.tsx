@@ -26,7 +26,7 @@ export function AdvanceForm({ workers, today }: { workers: { id: string; name: s
   return (
     <form ref={form} onSubmit={action} className="bg-card grid gap-3 rounded-xl border p-4 sm:grid-cols-[2fr_1fr_1fr]">
       <div className="grid gap-1.5">
-        <Label htmlFor="worker_id">Worker</Label>
+        <Label htmlFor="worker_id">Employee</Label>
         <NativeSelect id="worker_id" name="worker_id" required defaultValue="">
           <option value="" disabled>
             Choose…

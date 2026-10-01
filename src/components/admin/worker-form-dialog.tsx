@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Pencil, UserPlus } from "lucide-react";
 
-import { saveWorker, type SaveWorkerState } from "@/app/admin/workers/actions";
+import { saveWorker, type SaveWorkerState } from "@/app/admin/employees/actions";
 import { PhotoPicker } from "@/components/admin/photo-picker";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,15 +37,15 @@ export function WorkerFormDialog({ ownerId, worker }: { ownerId: string; worker?
           </Button>
         ) : (
           <Button size="lg">
-            <UserPlus /> Add worker
+            <UserPlus /> Add employee
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{worker ? `Edit ${worker.name}` : "Add worker"}</DialogTitle>
+          <DialogTitle>{worker ? `Edit ${worker.name}` : "Add employee"}</DialogTitle>
           <DialogDescription>
-            {worker ? "Leave PIN empty to keep the current one." : "The worker uses the PIN to clock in and out."}
+            {worker ? "Leave PIN empty to keep the current one." : "The employee uses the PIN to clock in and out."}
           </DialogDescription>
         </DialogHeader>
         {/* Re-mount on open so the form starts fresh each time. */}
@@ -151,7 +151,7 @@ function WorkerForm({ ownerId, worker, onSaved }: { ownerId: string; worker?: Wo
       )}
 
       <Button type="submit" size="lg" disabled={pending}>
-        {pending ? "Saving…" : worker ? "Save changes" : "Add worker"}
+        {pending ? "Saving…" : worker ? "Save changes" : "Add employee"}
       </Button>
     </form>
   );

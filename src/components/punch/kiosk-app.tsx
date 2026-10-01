@@ -136,7 +136,7 @@ export function KioskApp({ businessName, initialWorkers }: { businessName: strin
       </header>
 
       {workers.length === 0 ? (
-        <p className="text-muted-foreground m-auto text-center text-lg">No workers yet. The owner adds them.</p>
+        <p className="text-muted-foreground m-auto text-center text-lg">No employees yet. The owner adds them.</p>
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {workers.map((w) => (

@@ -106,7 +106,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
     `Gross pay: ${money(p.gross_pay)}`,
     `Advances: − ${money(p.advances_total)}`,
     p.net_payable < 0
-      ? `*Worker owes: ${money(-p.net_payable)}*`
+      ? `*Employee owes: ${money(-p.net_payable)}*`
       : `*Net payable: ${money(p.net_payable)}*`,
   ].join("\n");
   const waNumber = whatsappNumber(w.phone, settings.currency);
@@ -148,7 +148,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
         </header>
 
         <section className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
-          <Field label="Worker" value={<span className="text-base font-semibold">{w.name}</span>} />
+          <Field label="Employee" value={<span className="text-base font-semibold">{w.name}</span>} />
           <Field label="Phone" value={w.phone ?? "—"} />
           <Field label={`Pay type · ${WAGE_LABEL_HI[w.wage_type]}`} value={`${WAGE_LABEL[w.wage_type]} · ${rateText}`} />
           <Field label="Shift" value={`${formatHours(Number(w.standard_shift_hours))} h · OT ${money(otRate)} / h`} />
@@ -202,7 +202,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
           <div>
             <div className="text-lg font-bold">Net payable</div>
             <div className="text-sm text-neutral-600">
-              {p.net_payable < 0 ? "Advances are more than pay; worker owes this amount" : "कुल देय राशि"}
+              {p.net_payable < 0 ? "Advances are more than pay; employee owes this amount" : "कुल देय राशि"}
             </div>
           </div>
           <div
@@ -260,7 +260,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
 
         <footer className="grid grid-cols-2 gap-8 pt-10 text-sm">
           <div className="border-t border-neutral-900 pt-1 text-center">Employer signature</div>
-          <div className="border-t border-neutral-900 pt-1 text-center">Worker signature / thumb · अंगूठा</div>
+          <div className="border-t border-neutral-900 pt-1 text-center">Employee signature / thumb · अंगूठा</div>
           <p className="col-span-2 text-center text-xs text-neutral-500">Generated on {day(today)}</p>
         </footer>
       </article>

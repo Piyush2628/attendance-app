@@ -12,7 +12,7 @@ export async function addAdvance(_prev: AdvanceState, formData: FormData): Promi
   const date = String(formData.get("date") ?? "");
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
-  if (!workerId) return { error: "Choose a worker." };
+  if (!workerId) return { error: "Choose an employee." };
   if (!Number.isFinite(amount) || amount <= 0) return { error: "Enter an amount above 0." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Choose a date." };
 

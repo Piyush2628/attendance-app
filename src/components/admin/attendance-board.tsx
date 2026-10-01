@@ -69,7 +69,7 @@ export function AttendanceBoard({ rows, timeZone }: { rows: BoardRow[]; timeZone
   if (rows.length === 0) {
     return (
       <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center">
-        No workers yet. Add them on the Workers tab.
+        No employees yet. Add them on the Employees tab.
       </p>
     );
   }

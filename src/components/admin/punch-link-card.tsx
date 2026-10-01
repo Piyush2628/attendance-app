@@ -18,7 +18,7 @@ export function PunchLinkCard({ kioskCode }: { kioskCode: string }) {
     <div className="bg-muted/50 flex flex-col gap-2 rounded-xl border p-3 text-sm sm:flex-row sm:items-center">
       <MonitorSmartphone className="text-muted-foreground hidden size-5 sm:block" />
       <div className="min-w-0 flex-1">
-        <div className="font-medium">Punch link for the kiosk tablet and workers&apos; phones</div>
+        <div className="font-medium">Punch link for the kiosk tablet and employees&apos; phones</div>
         <div className="text-muted-foreground truncate font-mono text-xs">{url}</div>
         <div className="text-muted-foreground text-xs">
           Business code: <span className="font-mono font-semibold">{kioskCode}</span>

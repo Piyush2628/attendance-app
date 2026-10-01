@@ -36,7 +36,7 @@ export async function saveWorker(_prev: SaveWorkerState, formData: FormData): Pr
     ot_rate_per_hour: num(formData, "ot_rate_per_hour"),
   };
 
-  if (!name) return { error: "Enter the worker's name." };
+  if (!name) return { error: "Enter the employee's name." };
   if (phone && !/^[0-9+]{6,15}$/.test(phone)) return { error: "Phone number looks wrong." };
   if (!WAGE_TYPES.includes(wageType)) return { error: "Choose daily, hourly or monthly." };
   for (const [key, v] of Object.entries(values)) {
@@ -80,6 +80,6 @@ export async function setWorkerActive(workerId: string, active: boolean) {
 }
 
 function friendly(error: { code?: string; message: string }) {
-  if (error.code === "23505") return "Another worker already has this phone number.";
+  if (error.code === "23505") return "Another employee already has this phone number.";
   return error.message;
 }

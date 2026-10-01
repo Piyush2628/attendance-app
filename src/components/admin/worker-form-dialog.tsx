@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { timeInputValue } from "@/lib/timing";
 import { useFormAction } from "@/lib/use-form-action";
 import { cn } from "@/lib/utils";
 import type { WageType, Worker } from "@/types/database";
@@ -26,7 +27,15 @@ const WAGE_OPTIONS: { value: WageType; label: string; hint: string }[] = [
   { value: "monthly", label: "Monthly", hint: "Salary" },
 ];
 
-export function WorkerFormDialog({ ownerId, worker }: { ownerId: string; worker?: Worker }) {
+type FormProps = {
+  ownerId: string;
+  worker?: Worker;
+  /** "10:30 AM – 7:30 PM", or null when the business has no timing. */
+  businessTiming: string | null;
+};
+
+export function WorkerFormDialog(props: FormProps) {
+  const { worker } = props;
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -49,14 +58,15 @@ export function WorkerFormDialog({ ownerId, worker }: { ownerId: string; worker?
           </DialogDescription>
         </DialogHeader>
         {/* Re-mount on open so the form starts fresh each time. */}
-        {open && <WorkerForm ownerId={ownerId} worker={worker} onSaved={() => setOpen(false)} />}
+        {open && <WorkerForm {...props} onSaved={() => setOpen(false)} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function WorkerForm({ ownerId, worker, onSaved }: { ownerId: string; worker?: Worker; onSaved: () => void }) {
+function WorkerForm({ ownerId, worker, businessTiming, onSaved }: FormProps & { onSaved: () => void }) {
   const [state, action, pending] = useFormAction<SaveWorkerState>(saveWorker, {});
+  const [ownTiming, setOwnTiming] = useState(Boolean(worker?.work_start));
   const [wageType, setWageType] = useState<WageType>(worker?.wage_type ?? "daily");
   const [name, setName] = useState(worker?.name ?? "");
 
@@ -127,21 +137,37 @@ function WorkerForm({ ownerId, worker, onSaved }: { ownerId: string; worker?: Wo
         <Field label="Monthly salary (₹)" htmlFor="monthly_salary" hidden={wageType !== "monthly"}>
           <MoneyInput id="monthly_salary" defaultValue={worker?.monthly_salary} />
         </Field>
-        <Field label="Shift hours" htmlFor="standard_shift_hours">
-          <Input
-            id="standard_shift_hours"
-            name="standard_shift_hours"
-            type="number"
-            inputMode="decimal"
-            step="0.5"
-            min="1"
-            max="24"
-            defaultValue={worker?.standard_shift_hours ?? 8}
-          />
-        </Field>
         <Field label="Overtime rate (₹/hour)" htmlFor="ot_rate_per_hour" hint="0 = no overtime pay">
           <MoneyInput id="ot_rate_per_hour" defaultValue={worker?.ot_rate_per_hour} />
         </Field>
+      </div>
+
+      <div className="grid gap-2 rounded-lg border p-3">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={ownTiming}
+            onChange={(e) => setOwnTiming(e.target.checked)}
+            className="accent-primary size-5"
+          />
+          Different work timing (part time)
+        </label>
+        {ownTiming ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Start" htmlFor="work_start">
+              <Input id="work_start" name="work_start" type="time" defaultValue={timeInputValue(worker?.work_start)} />
+            </Field>
+            <Field label="End" htmlFor="work_end">
+              <Input id="work_end" name="work_end" type="time" defaultValue={timeInputValue(worker?.work_end)} />
+            </Field>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            {businessTiming
+              ? `Uses the business timing, ${businessTiming}.`
+              : "No fixed timing: any day they clock in and out counts as a full day."}
+          </p>
+        )}
       </div>
 
       {state.error && (

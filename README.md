@@ -31,6 +31,7 @@ supabase/
   migrations/02_admin.sql      business name on sign-up, worker-photos bucket (step 2)
   migrations/03_function_grants.sql  owner-only functions not callable by anon
   migrations/04_gps.sql        work location + radius, location stored on each punch
+  migrations/05_timings_selfies.sql  optional work timings, off days, punch selfies
   tests/                       plain-Postgres behaviour tests for the migration
 src/
   proxy.ts                     refreshes the owner's session, guards /admin
@@ -40,8 +41,9 @@ src/
     auth/confirm/              sign-up email confirmation link
     admin/                     owner dashboard: live board (step 2)
       employees/               add / edit employees, set PINs
-      attendance/              one employee's week / month / year (?e=&view=&d=)
-      settings/                punch link, location check
+      attendance/              one employee's week / month / year (?e=&view=&d=); add, edit, delete days
+      selfie/[id]/             a punch selfie as a JPEG (owner only, by RLS)
+      settings/                punch link, work timings, location check, selfie
       payroll/                 salary report, ?from=&to= (default: this month)
       payroll/[workerId]/      printable A4 / phone salary slip
     punch/                     worker kiosk + personal phone mode (step 3)
@@ -55,6 +57,7 @@ src/
     format.ts                  minutes, rupees, month ranges
     admin/period.ts            pay period from ?from=&to=
     admin/calendar.ts          week / month / year ranges for the attendance page
+    timing.ts                  work timings, off days, owner-time-zone conversions
   types/database.ts            typed schema + RPC result shapes
 ```
 
@@ -73,7 +76,7 @@ to the punch screen.
 
 ## Location check (GPS)
 
-Off by default. On the Today page, the owner stands at the workplace, taps "Use my current
+Off by default. On the Settings page (gear icon), the owner stands at the workplace, taps "Use my current
 location" (or pastes coordinates from Google Maps), picks an allowed distance (200 m is a good
 start) and ticks "Check location when employees punch".
 
@@ -84,6 +87,35 @@ start) and ticks "Check location when employees punch".
   board shows "In 44 m", linking to the spot on Google Maps, in red when outside the distance.
 - The browser's location can be faked with mock-GPS apps. This check stops the everyday case
   (punching from home or on the way), not a determined cheat.
+
+## Work timings and off days
+
+Both optional, on the Settings page.
+
+- **Business timing** (e.g. 10:30 AM to 7:30 PM). An employee can have their own timing instead
+  (part time), set in their Employees form. With a timing, a day is present when they worked at
+  least the timing minus 30 minutes, half day at half of it, absent below that; overtime is time
+  past the timing, and clocking in more than 10 minutes after the start shows a "Late" tag.
+  Timings past midnight (night shift) work.
+- **No timing at all:** any day the employee clocks in and out is a full day, with no overtime.
+- **Off days** (Sunday by default): punches are still recorded and shown, but left out of the
+  salary. A monthly salary is divided over the month's working days (days that aren't off days).
+
+Changing a timing applies to punches from then on; past days keep their status.
+
+## Selfie at punch
+
+Off by default; turn it on in Settings. Every clock-in and clock-out then opens the front camera,
+counts down 3 seconds and takes a 320×320 JPEG (about 15–25 KB). The photo is stored in the
+`punch_selfies` table, not in Storage, and every punch deletes photos older than 45 days, so the
+database stays small without a scheduled job. The Today board and the Attendance page show the
+photos; tap one to open it.
+
+## Correcting attendance
+
+On the Attendance page, the pencil next to a day edits its in/out times (in the business time
+zone; an out time before the in time is the next morning), sets a fixed status, adds a note, or
+deletes the day. "Add day" enters a day that has no punch.
 
 ## Installing on phones and tablets
 
@@ -110,7 +142,7 @@ Employees have no Supabase Auth account and the `anon` role cannot read any tabl
 | --- | --- | --- |
 | `kiosk_list_workers(code)` | anon | business name + each employee's name, photo, clocked-in flag |
 | `kiosk_verify_pin(code, worker, pin)` | anon | that employee's today + last 7 days |
-| `kiosk_punch(code, worker, pin)` | anon | clock in or out, then the summary |
+| `kiosk_punch(code, worker, pin, lat, lng, accuracy, selfie)` | anon | clock in or out, then the summary |
 | `worker_login(code, phone, pin)` | anon | a 90-day session token for a personal phone |
 | `worker_status(token)` / `worker_punch(token)` / `worker_logout(token)` | anon | same, by token |
 | `set_worker_pin(worker, pin)` | owner | sets a bcrypt hash, clears lockout, logs out phones |
@@ -137,15 +169,15 @@ employee (or a contact picker if no phone is saved) with the summary filled in.
 
 | Type | Base | Overtime |
 | --- | --- | --- |
-| Daily | present = daily rate, half day = 50% | hours past the shift × OT rate |
+| Daily | present = daily rate, half day = 50% | hours past the timing × OT rate |
 | Hourly | regular hours × hourly rate | OT hours × OT rate (hourly rate if OT rate is 0) |
-| Monthly | present = salary ÷ days in month, half day = 50% of that | OT hours × OT rate |
+| Monthly | present = salary ÷ working days in month, half day = 50% of that | OT hours × OT rate |
 
 The business gives no cash advances, so the app has no advances screen and salary is the gross
 pay. (The `advances` table and the `advances_total` / `net_payable` columns of `payroll_report`
 are still in the database, unused.) A day's status is set when the employee
-clocks out: a full shift is present, at least half a shift is half day, less is absent. The
-owner's manual mark always wins.
+clocks out, by the work timing rules above. Off days are left out. The owner's manual mark
+always wins.
 
 ## Database tests
 

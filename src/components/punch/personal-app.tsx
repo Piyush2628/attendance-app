@@ -8,7 +8,8 @@ import { ErrorBox } from "@/components/punch/kiosk-app";
 import { OFFLINE_ERROR } from "@/components/punch/messages";
 import { SuccessScreen } from "@/components/punch/success-screen";
 import { WorkerPanel } from "@/components/punch/worker-panel";
-import { punchWithLocation } from "@/components/punch/punch-with-location";
+import { punchWithChecks } from "@/components/punch/punch-with-checks";
+import { useSelfieCamera } from "@/components/punch/selfie-camera";
 import { InstallButton } from "@/components/pwa/install-button";
 import { Button } from "@/components/ui/button";
 import type { PunchError, PunchResult, WorkerSummary } from "@/types/database";
@@ -19,16 +20,20 @@ export function PersonalApp({ initialSummary }: { initialSummary: WorkerSummary 
   const [busy, setBusy] = useState<false | "punch" | "location">(false);
   const [error, setError] = useState<PunchError | null>(null);
   const [done, setDone] = useState<Extract<PunchResult, { ok: true }> | null>(null);
+  const { takeSelfie, camera } = useSelfieCamera();
 
   async function punch() {
     setError(null);
     try {
-      const res = await punchWithLocation(
-        summary.gps_required,
-        workerPunch,
-        () => setBusy("location"),
-        () => setBusy("punch"),
-      );
+      const res = await punchWithChecks({
+        needsLocation: summary.gps_required,
+        needsSelfie: summary.selfie_required,
+        takeSelfie,
+        punch: workerPunch,
+        onLocating: () => setBusy("location"),
+        onSaving: () => setBusy("punch"),
+      });
+      if (!res) return; // camera cancelled
       if (res.ok) {
         setDone(res);
         setSummary(res.summary);
@@ -76,6 +81,7 @@ export function PersonalApp({ initialSummary }: { initialSummary: WorkerSummary 
           </>
         }
       />
+      {camera}
     </div>
   );
 }

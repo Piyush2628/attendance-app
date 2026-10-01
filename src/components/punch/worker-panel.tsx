@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, LogIn, LogOut, MapPin } from "lucide-react";
+import { Camera, Loader2, LogIn, LogOut, MapPin } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { WorkerAvatar } from "@/components/worker-avatar";
@@ -90,6 +90,11 @@ export function WorkerPanel({
       {summary.gps_required && (
         <p className="text-muted-foreground -mt-2 flex items-center gap-1 text-sm">
           <MapPin className="size-4" /> Punch from the workplace · काम की जगह से ही पंच करें
+        </p>
+      )}
+      {summary.selfie_required && (
+        <p className="text-muted-foreground -mt-2 flex items-center gap-1 text-sm">
+          <Camera className="size-4" /> A photo is taken when you punch · पंच पर फ़ोटो ली जाएगी
         </p>
       )}
 

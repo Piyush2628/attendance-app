@@ -1,5 +1,7 @@
 import { PunchLinkCard } from "@/components/admin/punch-link-card";
+import { SelfieCard } from "@/components/admin/selfie-card";
 import { WorkLocationCard } from "@/components/admin/work-location-card";
+import { WorkTimingsCard } from "@/components/admin/work-timings-card";
 import { requireOwner } from "@/lib/admin/data";
 
 export const metadata = { title: "Settings" };
@@ -10,7 +12,9 @@ export default async function SettingsPage() {
     <div className="grid grid-cols-1 gap-4">
       <h1 className="text-2xl font-bold">Settings</h1>
       <PunchLinkCard kioskCode={settings.kiosk_code} />
+      <WorkTimingsCard settings={settings} />
       <WorkLocationCard settings={settings} />
+      <SelfieCard selfieRequired={settings.selfie_required} />
     </div>
   );
 }

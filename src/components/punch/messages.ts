@@ -46,6 +46,15 @@ export function errorMessage(err: PunchError): { en: string; hi: string } {
     case "location_needed":
     case "location_unavailable":
       return { en: "Could not find your location. Turn on GPS and try again.", hi: "GPS चालू करके फिर कोशिश करें" };
+    case "selfie_needed":
+      return { en: "A selfie is needed to punch. Try again and look at the camera.", hi: "पंच के लिए फ़ोटो ज़रूरी है" };
+    case "camera_denied":
+      return {
+        en: "Camera is blocked. Allow the camera for this site in the browser settings, then try again.",
+        hi: "कैमरे की इजाज़त दें, फिर कोशिश करें",
+      };
+    case "camera_unavailable":
+      return { en: "Could not open the camera. Close other apps using it and try again.", hi: "कैमरा नहीं खुला, फिर कोशिश करें" };
     case "offline":
       return { en: "No internet. Nothing was saved. Try again when it's back.", hi: "इंटरनेट नहीं है, फिर से कोशिश करें" };
   }

@@ -137,11 +137,7 @@ applies the migration and runs `supabase/tests/schema_test.sql`.
 
 ## Email confirmation
 
-Supabase asks new owners to confirm their email. For the link to sign them straight in, set
-Auth → Email Templates → "Confirm signup" to link to:
-
-```
-{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/admin
-```
-
-and set Auth → URL Configuration → Site URL to your Vercel URL.
+Supabase asks new owners to confirm their email. Set Auth → URL Configuration → **Site URL** to
+your Vercel URL (for example `https://attendance-app.vercel.app`) so the link in that email opens
+your app. The default "Confirm signup" email template works as is; the link signs the owner
+straight in to the dashboard.

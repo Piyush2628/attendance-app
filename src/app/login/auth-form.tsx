@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
 
 import { signIn, signUp, type AuthState } from "./actions";
 
-export function AuthForm({ next }: { next?: string }) {
+export type Notice = { tone: "ok" | "error"; text: string };
+
+export function AuthForm({ next, notice }: { next?: string; notice?: Notice }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [signInState, signInAction, signingIn] = useFormAction<AuthState>(signIn, {});
   const [signUpState, signUpAction, signingUp] = useFormAction<AuthState>(signUp, {});
@@ -70,6 +72,14 @@ export function AuthForm({ next }: { next?: string }) {
             />
           </div>
 
+          {notice && !state.error && !state.message && (
+            <p
+              role={notice.tone === "error" ? "alert" : "status"}
+              className={cn("text-sm", notice.tone === "error" ? "text-destructive" : "text-emerald-700")}
+            >
+              {notice.text}
+            </p>
+          )}
           {state.error && (
             <p role="alert" className="text-destructive text-sm">
               {state.error}

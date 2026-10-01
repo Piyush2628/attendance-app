@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Building2 } from "lucide-react";
 
 import { saveBusinessCode, type CodeState } from "@/app/punch/actions";
@@ -35,6 +36,9 @@ export function BusinessCodeForm({ initialError }: { initialError?: string }) {
       <Button type="submit" size="xl" className="w-full" disabled={pending}>
         {pending ? "Checking…" : "Continue"}
       </Button>
+      <Link href="/login" className="text-muted-foreground text-sm underline underline-offset-4">
+        Owner? Sign in to the dashboard
+      </Link>
     </form>
   );
 }

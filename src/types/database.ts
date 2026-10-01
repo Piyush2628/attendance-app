@@ -227,7 +227,9 @@ export type PunchErrorCode =
   | "wrong_pin"
   | "no_pin"
   | "invalid_session"
-  | "already_done_today";
+  | "already_done_today"
+  // Client-side only: the request never reached the server (no internet).
+  | "offline";
 
 export type PunchError = {
   ok: false;

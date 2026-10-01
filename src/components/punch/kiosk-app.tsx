@@ -5,12 +5,14 @@ import Link from "next/link";
 import { ArrowLeft, Smartphone } from "lucide-react";
 
 import { kioskPunch, kioskVerify, listKioskWorkers } from "@/app/punch/actions";
-import { errorMessage } from "@/components/punch/messages";
+import { errorMessage, OFFLINE_ERROR } from "@/components/punch/messages";
 import { PinPad } from "@/components/punch/pin-pad";
 import { SuccessScreen } from "@/components/punch/success-screen";
 import { WorkerPanel } from "@/components/punch/worker-panel";
+import { InstallButton } from "@/components/pwa/install-button";
 import { Button } from "@/components/ui/button";
 import { WorkerAvatar } from "@/components/worker-avatar";
+import { useWakeLock } from "@/lib/pwa";
 import { cn } from "@/lib/utils";
 import type { PunchError, WorkerSummary } from "@/types/database";
 
@@ -32,6 +34,8 @@ export function KioskApp({ businessName, initialWorkers }: { businessName: strin
   const [error, setError] = useState<PunchError | null>(null);
   const [errorKey, setErrorKey] = useState(0);
   const idle = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // A kiosk tablet should not go dark between workers.
+  useWakeLock();
 
   const backToGrid = useCallback(() => {
     setStep({ kind: "grid" });
@@ -67,6 +71,9 @@ export function KioskApp({ businessName, initialWorkers }: { businessName: strin
         setError(res);
         setErrorKey((k) => k + 1);
       }
+    } catch {
+      setError(OFFLINE_ERROR);
+      setErrorKey((k) => k + 1);
     } finally {
       setBusy(false);
     }
@@ -81,6 +88,8 @@ export function KioskApp({ businessName, initialWorkers }: { businessName: strin
         setStep({ kind: "done", name: worker.name, action: res.action, at: res.at, totalMinutes: res.total_minutes });
         setWorkers((ws) => ws.map((w) => (w.id === worker.id ? { ...w, clocked_in: res.action === "clock_in" } : w)));
       } else setError(res);
+    } catch {
+      setError(OFFLINE_ERROR);
     } finally {
       setBusy(false);
     }
@@ -156,7 +165,8 @@ export function KioskApp({ businessName, initialWorkers }: { businessName: strin
         </ul>
       )}
 
-      <footer className="text-muted-foreground mt-auto pt-8 text-center text-sm">
+      <footer className="text-muted-foreground mt-auto grid justify-items-center gap-4 pt-8 text-center text-sm">
+        <InstallButton />
         <Link href="/punch/login" className="inline-flex items-center gap-1 underline underline-offset-4">
           <Smartphone className="size-4" /> On your own phone? Log in once here
         </Link>

@@ -1,5 +1,8 @@
 import type { PunchError } from "@/types/database";
 
+/** A server action that threw (network down, server unreachable). */
+export const OFFLINE_ERROR: PunchError = { ok: false, error: "offline" };
+
 /** Short, plain messages. Hindi line underneath for workers who read Hindi better. */
 export function errorMessage(err: PunchError): { en: string; hi: string } {
   switch (err.error) {
@@ -24,5 +27,7 @@ export function errorMessage(err: PunchError): { en: string; hi: string } {
       return { en: "Please log in again.", hi: "फिर से लॉगिन करें" };
     case "invalid_code":
       return { en: "This device is not set up. Ask the owner for the link.", hi: "मालिक से लिंक लें" };
+    case "offline":
+      return { en: "No internet. Nothing was saved. Try again when it's back.", hi: "इंटरनेट नहीं है, फिर से कोशिश करें" };
   }
 }

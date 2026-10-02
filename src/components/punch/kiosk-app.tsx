@@ -25,7 +25,7 @@ type Step =
   | { kind: "grid" }
   | { kind: "pin"; worker: KioskWorker }
   | { kind: "panel"; worker: KioskWorker; pin: string; summary: WorkerSummary }
-  | { kind: "done"; name: string; action: "clock_in" | "clock_out"; at: string; totalMinutes?: number };
+  | { kind: "done"; name: string; action: "clock_in" | "clock_out"; at: string };
 
 const IDLE_MS = 20_000; // back to the worker list if nobody touches the screen
 
@@ -114,7 +114,7 @@ export function KioskApp({
       });
       if (!res) return; // camera cancelled
       if (res.ok) {
-        setStep({ kind: "done", name: worker.name, action: res.action, at: res.at, totalMinutes: res.total_minutes });
+        setStep({ kind: "done", name: worker.name, action: res.action, at: res.at });
         setWorkers((ws) => ws.map((w) => (w.id === worker.id ? { ...w, clocked_in: res.action === "clock_in" } : w)));
       } else setError(res);
     } catch {

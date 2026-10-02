@@ -58,7 +58,6 @@ export function PersonalApp({ initialSummary }: { initialSummary: WorkerSummary 
         action={done.action}
         at={done.at}
         name={summary.worker.name}
-        totalMinutes={done.total_minutes}
         onDone={afterSuccess}
       />
     );

@@ -36,7 +36,7 @@ supabase/
 src/
   proxy.ts                     refreshes the owner's session, guards /admin
   app/
-    manifest.ts                PWA manifest: opens on /punch, full screen, shortcuts
+    manifest.ts                PWA manifest: opens on /start, full screen, shortcuts
     login/                     owner sign-in and sign-up (step 2)
     auth/confirm/              sign-up email confirmation link
     admin/                     owner dashboard: live board (step 2)
@@ -127,6 +127,10 @@ Open the punch link once on the device, then:
   shortcuts.
 - **iPhone / iPad (Safari):** tap **Add to Home Screen** for the three steps (Share → Add to Home
   Screen → Add).
+
+The installed app opens on `/start`: the dashboard when the owner is signed in on that device,
+the punch screen otherwise. The punch screens have an **Owner login** link at the bottom, so the
+owner can sign in from the installed app. After signing out, the app opens on the punch screen again.
 
 While the kiosk screen is open it asks the browser to keep the display on. With no internet a red
 banner appears, a punch attempt says nothing was saved, and pages that can't load show a simple

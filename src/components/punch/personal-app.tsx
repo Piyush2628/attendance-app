@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LayoutDashboard, LogOut } from "lucide-react";
 
 import { workerLogout, workerPunch, workerStatus } from "@/app/punch/actions";
 import { ErrorBox } from "@/components/punch/kiosk-app";
@@ -78,6 +79,13 @@ export function PersonalApp({ initialSummary }: { initialSummary: WorkerSummary 
                 <LogOut /> Log out of this phone
               </Button>
             </form>
+            <Link
+              href="/admin"
+              prefetch={false}
+              className="text-muted-foreground mt-2 inline-flex items-center gap-1 text-sm underline underline-offset-4"
+            >
+              <LayoutDashboard className="size-4" /> Owner login
+            </Link>
           </>
         }
       />

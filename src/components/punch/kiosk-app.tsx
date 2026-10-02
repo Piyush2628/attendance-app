@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Smartphone } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, Smartphone } from "lucide-react";
 
 import { kioskPunch, kioskVerify, listKioskWorkers } from "@/app/punch/actions";
 import { errorMessage, OFFLINE_ERROR } from "@/components/punch/messages";
@@ -203,6 +203,9 @@ export function KioskApp({
         <InstallButton />
         <Link href="/punch/login" className="inline-flex items-center gap-1 underline underline-offset-4">
           <Smartphone className="size-4" /> On your own phone? Log in once here
+        </Link>
+        <Link href="/admin" prefetch={false} className="inline-flex items-center gap-1 underline underline-offset-4">
+          <LayoutDashboard className="size-4" /> Owner login
         </Link>
       </footer>
     </div>

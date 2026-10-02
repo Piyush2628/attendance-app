@@ -7,8 +7,9 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Attendance",
     description: "Clock in, clock out and salary for small businesses.",
     lang: "en-IN",
-    // The installed app opens on the punch screen (kiosk tablets, workers' phones).
-    start_url: "/punch",
+    // The installed app opens on /start: the dashboard for a signed-in owner,
+    // the punch screen for everyone else (kiosk tablets, employees' phones).
+    start_url: "/start",
     scope: "/",
     // Full screen where the browser supports it (Android), otherwise like a normal app.
     display: "standalone",

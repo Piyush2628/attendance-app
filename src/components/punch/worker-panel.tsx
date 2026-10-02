@@ -1,30 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Camera, Loader2, LogIn, LogOut, MapPin } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { WorkerAvatar } from "@/components/worker-avatar";
-import { formatMinutes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { WorkerSummary } from "@/types/database";
 
 function time(iso: string | null) {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "–";
-}
-
-/** Live "today" minutes. Uses the server clock offset so a wrong device clock doesn't matter. */
-function useTodayMinutes(summary: WorkerSummary) {
-  const [now, setNow] = useState(() => Date.now());
-  const [offset] = useState(() => new Date(summary.server_time).getTime() - Date.now());
-  useEffect(() => {
-    if (!summary.clocked_in) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [summary.clocked_in]);
-  if (!summary.clocked_in || !summary.clock_in_at) return { minutes: summary.today_minutes, seconds: 0 };
-  const elapsed = Math.max(0, now + offset - new Date(summary.clock_in_at).getTime());
-  return { minutes: Math.floor(elapsed / 60_000), seconds: Math.floor((elapsed % 60_000) / 1000) };
 }
 
 const STATUS_STYLE = {
@@ -35,8 +19,9 @@ const STATUS_STYLE = {
 const STATUS_LABEL = { present: "Full day", half_day: "Half day", absent: "Absent" } as const;
 
 /**
- * The worker's screen: who they are, a giant green CLOCK IN or red CLOCK OUT
- * button, today's hours and the last 7 days.
+ * The employee's screen: who they are, a giant green CLOCK IN or red CLOCK OUT
+ * button and the last 7 days. Hours worked are for the owner only, so they
+ * are not shown here.
  */
 export function WorkerPanel({
   summary,
@@ -50,7 +35,6 @@ export function WorkerPanel({
   onPunch: () => void;
   footer?: React.ReactNode;
 }) {
-  const { minutes, seconds } = useTodayMinutes(summary);
   const clockedIn = summary.clocked_in;
 
   return (
@@ -98,14 +82,6 @@ export function WorkerPanel({
         </p>
       )}
 
-      <div className="bg-muted w-full rounded-2xl p-4 text-center">
-        <div className="text-muted-foreground text-sm font-medium">Today&apos;s hours · आज</div>
-        <div className="font-mono text-5xl font-bold tabular-nums">
-          {Math.floor(minutes / 60)}:{String(minutes % 60).padStart(2, "0")}
-          {clockedIn && <span className="text-muted-foreground text-3xl">:{String(seconds).padStart(2, "0")}</span>}
-        </div>
-      </div>
-
       <div className="w-full">
         <div className="text-muted-foreground mb-2 text-sm font-medium">Last 7 days</div>
         {summary.history.length === 0 ? (
@@ -124,7 +100,6 @@ export function WorkerPanel({
                 </div>
                 <div className="text-muted-foreground min-w-0 flex-1 text-sm">
                   {h.clock_in ? `${time(h.clock_in)} – ${h.clock_out ? time(h.clock_out) : "…"}` : "Marked by owner"}
-                  {h.total_minutes != null && <div className="text-foreground font-medium">{formatMinutes(h.total_minutes)}</div>}
                 </div>
                 {(h.clock_out || !h.clock_in) && (
                   <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", STATUS_STYLE[h.status])}>

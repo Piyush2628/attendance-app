@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { CircleCheckBig } from "lucide-react";
 
-import { formatMinutes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /** Full-screen confirmation that closes itself after 3 seconds (or on tap). */
@@ -11,13 +10,11 @@ export function SuccessScreen({
   action,
   at,
   name,
-  totalMinutes,
   onDone,
 }: {
   action: "clock_in" | "clock_out";
   at: string;
   name: string;
-  totalMinutes?: number;
   onDone: () => void;
 }) {
   useEffect(() => {
@@ -42,10 +39,7 @@ export function SuccessScreen({
       <div className="text-6xl font-bold tabular-nums">
         {new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
       </div>
-      <div className="text-xl">
-        {name}
-        {!isIn && totalMinutes != null && ` · ${formatMinutes(totalMinutes)} today`}
-      </div>
+      <div className="text-xl">{name}</div>
       {/* 3 second countdown bar */}
       <div className="absolute inset-x-0 bottom-0 h-2 origin-left animate-[shrink_3s_linear_forwards] bg-white/60" />
     </button>

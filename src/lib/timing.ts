@@ -36,7 +36,7 @@ export function timeInputValue(t: string | null | undefined) {
 
 /**
  * Reads a start/end pair from a form. Both empty = no timing (null, null).
- * Returns an error message when only one is filled or they are the same.
+ * Returns an error message when only one is filled, they are the same, or the shift is over 16 hours.
  */
 export function readTimingPair(
   formData: FormData,
@@ -49,6 +49,11 @@ export function readTimingPair(
   const valid = /^([01]\d|2[0-3]):[0-5]\d$/;
   if (!valid.test(start) || !valid.test(end)) return { error: "Enter both the start and end time." };
   if (start === end) return { error: "Start and end time can't be the same." };
+  // A shift over 16 hours is almost always AM/PM mixed up (12:30 to 07:30 instead of 7:30 PM).
+  const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+  if ((minutes(end) - minutes(start) + 1440) % 1440 > 16 * 60) {
+    return { error: "That timing is over 16 hours. Check AM and PM." };
+  }
   return { work_start: start, work_end: end };
 }
 

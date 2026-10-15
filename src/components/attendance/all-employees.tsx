@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 
 import { STATE, dayState, type DayState } from "@/components/attendance/day-state";
 import { EditDayDialog } from "@/components/attendance/edit-day-dialog";
@@ -145,12 +146,14 @@ function DayView({ owner, date, workers, logs }: { owner: Owner; date: string; w
     { label: "Half day", value: count("half_day"), className: "bg-amber-500/10 text-amber-700" },
     { label: "Absent", value: count("absent", "no_record"), className: "bg-punch-out/10 text-punch-out" },
   ];
-  if (count("open") > 0) stats.push({ label: "Still in", value: count("open"), className: "bg-sky-500/10 text-sky-700" });
-  if (count("not_in") > 0) stats.push({ label: "Not in yet", value: count("not_in"), className: "bg-muted" });
+  const pending = [
+    count("open") > 0 && `${count("open")} still in`,
+    count("not_in") > 0 && `${count("not_in")} not in yet`,
+  ].filter(Boolean);
 
   return (
     <>
-      <div className={cn("grid gap-2 text-center", ["grid-cols-3", "grid-cols-4", "grid-cols-5"][stats.length - 3])} data-testid="day-totals">
+      <div className="grid grid-cols-3 gap-2 text-center" data-testid="day-totals">
         {stats.map((s) => (
           <div key={s.label} className={cn("rounded-xl p-2", s.className)}>
             <div className="text-xl font-bold tabular-nums">{s.value}</div>
@@ -158,6 +161,9 @@ function DayView({ owner, date, workers, logs }: { owner: Owner; date: string; w
           </div>
         ))}
       </div>
+      {pending.length > 0 && (
+        <p className="text-muted-foreground -mt-2 text-center text-sm">{pending.join(" · ")}</p>
+      )}
 
       <ul className="divide-y rounded-xl border" data-testid="all-day-list">
         {rows.map(({ w, log, state }) => {
@@ -240,8 +246,6 @@ function RangeView({
         present: states.filter((s) => s === "present").length,
         half: states.filter((s) => s === "half_day").length,
         absent: states.filter((s) => s === "absent").length + noRecord,
-        open: states.filter((s) => s === "open").length,
-        offDayWork: ls.filter((l) => isOffDay(l.date, offDays) && dayState(l) !== "absent").length,
         counted: w.is_active && joined <= lastClosed,
       };
     })
@@ -249,51 +253,53 @@ function RangeView({
 
   return (
     <>
-      <p className="text-muted-foreground -mt-2 text-sm">
+      <p className="text-muted-foreground -mt-2 text-center text-sm">
         {workingDays.length} working {workingDays.length === 1 ? "day" : "days"}
-        {offDaysLabel(offDays) ? `, ${offDaysLabel(offDays)} not counted` : ""}. A day with no record counts as absent.
-        Tap a name to see their days.
+        {offDaysLabel(offDays) ? ` · ${offDaysLabel(offDays)} not counted` : ""}
       </p>
       <div className="overflow-hidden rounded-xl border" data-testid="range-table">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left">
-            <tr>
-              <th className="p-2 font-medium">Employee</th>
-              <th className="text-punch-in w-12 p-2 text-right font-medium" title="Present">P</th>
-              <th className="w-12 p-2 text-right font-medium text-amber-700" title="Half day">½</th>
-              <th className="text-punch-out w-12 p-2 text-right font-medium" title="Absent">A</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {rows.map((r) => (
-              <tr key={r.w.id} data-testid="range-row">
-                <td className="max-w-0 p-0">
-                  <Link
-                    href={`/admin/attendance?e=${r.w.id}&from=${from}&to=${to}`}
-                    prefetch={false}
-                    className="block p-2 underline-offset-2 hover:underline"
-                  >
-                    <span className="block truncate font-medium">
-                      {r.w.name}
-                      {!r.w.is_active && <span className="text-muted-foreground font-normal"> (inactive)</span>}
-                    </span>
-                    {(r.open > 0 || r.offDayWork > 0) && (
-                      <span className="text-muted-foreground block text-xs">
-                        {[r.open > 0 && STATE.open.label, r.offDayWork > 0 && `+${r.offDayWork} off ${r.offDayWork === 1 ? "day" : "days"}`]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    )}
-                  </Link>
-                </td>
-                <td className="p-2 text-right font-semibold tabular-nums">{r.present}</td>
-                <td className="p-2 text-right font-semibold tabular-nums">{r.half}</td>
-                <td className="p-2 text-right font-semibold tabular-nums">{r.absent}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="bg-muted/50 grid grid-cols-[1fr_repeat(3,3.25rem)_1rem] items-center gap-1.5 px-3 py-2 text-xs font-semibold">
+          <span>Employee</span>
+          <span className="text-punch-in text-center">Present</span>
+          <span className="text-center text-amber-700">Half day</span>
+          <span className="text-punch-out text-center">Absent</span>
+          <span />
+        </div>
+        <ul className="divide-y">
+          {rows.map((r) => (
+            <li key={r.w.id} data-testid="range-row">
+              <Link
+                href={`/admin/attendance?e=${r.w.id}&from=${from}&to=${to}`}
+                prefetch={false}
+                className="hover:bg-muted/40 grid grid-cols-[1fr_repeat(3,3.25rem)_1rem] items-center gap-1.5 px-3 py-3"
+              >
+                <span className="min-w-0 leading-tight font-medium break-words">
+                  {r.w.name}
+                  {!r.w.is_active && <span className="text-muted-foreground font-normal"> (inactive)</span>}
+                </span>
+                <Count value={r.present} className="bg-punch-in/10 text-punch-in" />
+                <Count value={r.half} className="bg-amber-500/10 text-amber-700" />
+                <Count value={r.absent} className="bg-punch-out/10 text-punch-out" />
+                <ChevronRight className="text-muted-foreground size-4" aria-hidden />
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
     </>
+  );
+}
+
+/** A count in a soft coloured box; zero is greyed out so the real numbers stand out. */
+function Count({ value, className }: { value: number; className: string }) {
+  return (
+    <span
+      className={cn(
+        "rounded-md py-1 text-center text-base font-semibold tabular-nums",
+        value === 0 ? "text-muted-foreground/60" : className,
+      )}
+    >
+      {value}
+    </span>
   );
 }

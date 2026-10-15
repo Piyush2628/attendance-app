@@ -30,7 +30,8 @@ export function WorkTimingsCard({
         <div className="min-w-0 flex-1">
           <div className="font-semibold">Work timings</div>
           <p className="text-muted-foreground text-sm">
-            Optional. With a timing set, the app marks late arrivals, half days and overtime. Without one, any day an
+            Optional. With a timing set, the app marks late arrivals, half days and overtime. Up to 1 h 29 min short
+            still counts as a full day, and half days are paid in full unless you mark them. Without one, any day an
             employee clocks in and out counts as a full day. Part-timers can have their own timing on the Employees
             page.
           </p>

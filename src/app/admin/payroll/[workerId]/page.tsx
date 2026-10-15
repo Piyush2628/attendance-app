@@ -80,9 +80,15 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
       new Date(`${iso}T00:00:00Z`),
     );
 
-  const paidDays = p.days_present + p.half_days / 2;
   const timing = timingLabel(effectiveTiming(w, settings));
   const isOff = (d: string) => isOffDay(d, settings.off_days);
+  // Same rule as payroll_report(): a half day from the hours is paid in full, one marked by the owner is paid half.
+  const paidDays = logs.data.reduce((sum, l) => {
+    if (isOff(l.date) || (!l.manual_override && l.clock_in && !l.clock_out)) return sum;
+    if (l.status === "present") return sum + 1;
+    if (l.status === "half_day") return sum + (l.manual_override ? 0.5 : 1);
+    return sum;
+  }, 0);
   const otRate = Number(w.ot_rate_per_hour) || (w.wage_type === "hourly" ? Number(w.hourly_rate) : 0);
   const rateText = {
     daily: `${money(w.daily_rate)} / day`,
@@ -252,6 +258,11 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
           )}
           {logs.data.some((l) => l.manual_override) && (
             <p className="pt-1 text-xs text-neutral-500">* Marked by owner</p>
+          )}
+          {logs.data.some((l) => l.status === "half_day" && !isOff(l.date)) && (
+            <p className="pt-1 text-xs text-neutral-500">
+              Half days are paid as a full day unless marked by owner (*), which pays half.
+            </p>
           )}
           {logs.data.some((l) => isOff(l.date)) && (
             <p className="pt-1 text-xs text-neutral-500">

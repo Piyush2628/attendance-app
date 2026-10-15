@@ -73,15 +73,15 @@ insert into advances (worker_id, date, amount, notes) values
   ('11111111-0000-0000-0000-000000000001', '2026-10-05', 999, 'next month, excluded');
 
 -- Payroll
--- Ramesh: 800 + 400 + 400(manual half) + OT 1h*100 = 1700, advance 500 -> 1200
+-- Ramesh: 800 + 800(half from hours, paid full) + 400(manual half) + OT 1h*100 = 2100, advance 500 -> 1600
 -- Suresh: 8h*100 + 2h*150 = 1100
--- Geeta: Sep has 30 days -> 1000/day: 8.5h present (+0.5h OT*120=60) + 4h half (500) + manual present (1000) = 2560
-select pg_temp.check((select gross_pay = 1700 and advances_total = 500 and net_payable = 1200
+-- Geeta: Sep has 30 days -> 1000/day: 8.5h present (+0.5h OT*120=60) + 4h half (paid full, 1000) + manual present (1000) = 3060
+select pg_temp.check((select gross_pay = 2100 and advances_total = 500 and net_payable = 1600
                         and days_present = 1 and half_days = 2 and ot_hours = 1
                       from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Ramesh%'), 'payroll daily');
 select pg_temp.check((select base_pay = 800 and ot_pay = 300 and gross_pay = 1100
                       from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Suresh%'), 'payroll hourly');
-select pg_temp.check((select base_pay = 2500 and ot_pay = 60 and gross_pay = 2560 and days_present = 2 and half_days = 1
+select pg_temp.check((select base_pay = 3000 and ot_pay = 60 and gross_pay = 3060 and days_present = 2 and half_days = 1
                       from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Geeta%'), 'payroll monthly');
 
 -- ---- Owner B is isolated -----------------------------------------------------
@@ -274,14 +274,43 @@ select pg_temp.check((select count(*) = 1 from attendance_logs
 select pg_temp.check((select base_pay = 1000 and days_present = 1 and half_days = 0
                       from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Kavita%'),
                      'monthly pay over working days, Sunday left out');
--- Anil: Mon 900 + Tue half 450 + Wed 900 (2h OT = 200) + Fri 900 (30 min OT = 50); Sunday unpaid
-select pg_temp.check((select base_pay = 3150 and ot_pay = 250 and days_present = 3 and half_days = 1 and absent_days = 1
+-- Anil: Mon 900 + Tue half (paid full) 900 + Wed 900 (2h OT = 200) + Fri 900 (30 min OT = 50); Sunday unpaid
+select pg_temp.check((select base_pay = 3600 and ot_pay = 250 and days_present = 3 and half_days = 1 and absent_days = 1
                       from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Anil%'),
                      'daily pay leaves out Sunday');
 update owner_settings set off_days = '{}';
-select pg_temp.check((select base_pay = 4050 from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Anil%'),
+select pg_temp.check((select base_pay = 4500 from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Anil%'),
                      'with no off days, Sunday is paid');
 update owner_settings set off_days = '{0}';
+
+-- Half day margin (06): short of the 9h timing by under 1h30 is a full day
+insert into attendance_logs (worker_id, clock_in, clock_out) values
+  ('11111111-0000-0000-0000-000000000005', '2026-09-15 11:59+05:30', '2026-09-15 19:30+05:30'), -- 1h29 late
+  ('11111111-0000-0000-0000-000000000005', '2026-09-16 12:00+05:30', '2026-09-16 19:30+05:30'), -- 1h30 late
+  ('11111111-0000-0000-0000-000000000005', '2026-09-17 11:15+05:30', '2026-09-17 18:45+05:30'), -- 45 late, 45 early
+  ('11111111-0000-0000-0000-000000000005', '2026-09-18 10:30+05:30', '2026-09-18 18:01+05:30'); -- 1h29 early
+select pg_temp.check((select status = 'present' and late_minutes = 89 from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-15'),
+                     'margin: 1h29 late is a full day');
+select pg_temp.check((select status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-16'),
+                     'margin: 1h30 late is a half day');
+select pg_temp.check((select status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-17'),
+                     'margin: late and early add up to 1h30, half day');
+select pg_temp.check((select status = 'present' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-18'),
+                     'margin: leaving 1h29 early is a full day');
+-- Half days from the hours are paid in full; the owner cuts one by marking it Half day.
+select pg_temp.check((select base_pay = 3600 and half_days = 2
+                      from payroll_report('2026-09-15', '2026-09-18') where worker_name like 'Anil%'),
+                     'half day from hours is paid as a full day');
+update attendance_logs set manual_override = true, status = 'half_day'
+ where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-16';
+select pg_temp.check((select base_pay = 3150 and half_days = 2
+                      from payroll_report('2026-09-15', '2026-09-18') where worker_name like 'Anil%'),
+                     'owner-marked half day is paid half');
+delete from attendance_logs where worker_id = '11111111-0000-0000-0000-000000000005' and date between '2026-09-15' and '2026-09-18';
 
 -- No timing at all: a day clocked in and out is present, with no overtime
 update owner_settings set work_start = null, work_end = null;

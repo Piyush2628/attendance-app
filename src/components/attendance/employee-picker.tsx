@@ -6,16 +6,20 @@ import { Loader2 } from "lucide-react";
 
 import { NativeSelect } from "@/components/ui/native-select";
 
-/** Switches the attendance page to another employee, keeping the view and date. */
+/** Switches the attendance page between all employees and one employee, keeping the dates. */
 export function EmployeePicker({
   workers,
   selected,
-  query,
+  employeeQuery,
+  allQuery,
 }: {
   workers: { id: string; name: string; is_active: boolean }[];
+  /** Employee id, or "" for all employees. */
   selected: string;
-  /** The rest of the query string (view, date). */
-  query: string;
+  /** Query string (dates) used when switching to one employee. */
+  employeeQuery: string;
+  /** Query string (from, to) used when switching to all employees. */
+  allQuery: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -25,8 +29,13 @@ export function EmployeePicker({
         aria-label="Employee"
         className="h-12 text-base font-semibold"
         value={selected}
-        onChange={(e) => startTransition(() => router.push(`/admin/attendance?e=${e.target.value}&${query}`))}
+        onChange={(e) => {
+          const id = e.target.value;
+          const href = id ? `/admin/attendance?e=${id}&${employeeQuery}` : `/admin/attendance?${allQuery}`;
+          startTransition(() => router.push(href));
+        }}
       >
+        <option value="">All employees</option>
         {workers.map((w) => (
           <option key={w.id} value={w.id}>
             {w.name}

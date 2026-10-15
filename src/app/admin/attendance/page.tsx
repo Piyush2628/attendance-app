@@ -1,16 +1,34 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, FileText } from "lucide-react";
 
 import { EditDayDialog } from "@/components/attendance/edit-day-dialog";
+import { AllEmployees, joinedOn } from "@/components/attendance/all-employees";
+import { dayState, STATE } from "@/components/attendance/day-state";
 import { EmployeePicker } from "@/components/attendance/employee-picker";
+import { RangePicker } from "@/components/attendance/range-picker";
 import { LateTag, SelfieThumbs } from "@/components/attendance/punch-tags";
 import { Button } from "@/components/ui/button";
 import { requireOwner, SELFIE_IDS, selfieIds } from "@/lib/admin/data";
-import { daysBetween, isIsoDate, monthName, rangeFor, shortDay, VIEWS, weekday, type View } from "@/lib/admin/calendar";
+import {
+  dayCount,
+  daysBetween,
+  missingDays,
+  isIsoDate,
+  monthName,
+  parseRange,
+  rangeFor,
+  rangeLabel,
+  shortDay,
+  VIEWS,
+  weekday,
+  type Range,
+  type View,
+} from "@/lib/admin/calendar";
 import { formatMinutes } from "@/lib/format";
 import { isOffDay, offDaysLabel } from "@/lib/timing";
 import { cn } from "@/lib/utils";
-import type { AttendanceLog, AttendanceStatus } from "@/types/database";
+import type { AttendanceLog } from "@/types/database";
 
 export const metadata = { title: "Attendance" };
 
@@ -21,27 +39,27 @@ type Log = Pick<
   "id" | "date" | "clock_in" | "clock_out" | "total_minutes" | "status" | "ot_minutes" | "manual_override" | "late_minutes" | "notes"
 >;
 
-type DayState = AttendanceStatus | "open";
-
-const STATE: Record<DayState, { label: string; short: string; cell: string; text: string }> = {
-  present: { label: "Present", short: "P", cell: "bg-punch-in text-punch-in-foreground", text: "text-punch-in" },
-  half_day: { label: "Half day", short: "½", cell: "bg-amber-500 text-white", text: "text-amber-700" },
-  absent: { label: "Absent", short: "A", cell: "bg-punch-out text-punch-out-foreground", text: "text-punch-out" },
-  open: { label: "Still in", short: "In", cell: "bg-sky-500 text-white", text: "text-sky-700" },
-};
-
-function dayState(l: Log): DayState {
-  return l.clock_in && !l.clock_out && !l.manual_override ? "open" : l.status;
-}
-
-const VIEW_LABEL: Record<View, string> = { week: "Week", month: "Month", year: "Year" };
+const VIEW_LABEL: Record<View | "custom", string> = { week: "Week", month: "Month", year: "Year", custom: "Custom" };
 
 export default async function AttendancePage({ searchParams }: PageProps<"/admin/attendance">) {
-  const { supabase, settings, today } = await requireOwner();
+  const owner = await requireOwner();
+  const { supabase, settings, today } = owner;
   const sp = await searchParams;
-  const view: View = VIEWS.includes(sp.view as View) ? (sp.view as View) : "month";
+  const custom = parseRange(sp.from, sp.to);
+  const requested = typeof sp.e === "string" && UUID.test(sp.e) ? sp.e : null;
+
+  // Without an employee: everyone's attendance for a day (today by default) or a range.
+  if (!requested) {
+    const r = custom ?? { from: today, to: today };
+    return <AllEmployees owner={owner} from={r.from} to={r.to} />;
+  }
+
+  // One employee: a week, month or year, or a custom from/to range.
+  const view: View | "custom" = custom ? "custom" : VIEWS.includes(sp.view as View) ? (sp.view as View) : "month";
   const date = isIsoDate(sp.d) ? sp.d : today;
-  const range = rangeFor(view, date);
+  const range = custom
+    ? { from: custom.from, to: custom.to, label: rangeLabel(custom.from, custom.to) }
+    : rangeFor(view as View, date);
 
   // Load the employee list and the requested employee's days together (one round trip).
   const loadLogs = (workerId: string) =>
@@ -52,46 +70,49 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
       .gte("date", range.from)
       .lte("date", range.to)
       .order("date");
-  const requested = typeof sp.e === "string" && UUID.test(sp.e) ? sp.e : null;
   const [workers, requestedLogs] = await Promise.all([
-    supabase.from("workers").select("id, name, is_active").order("is_active", { ascending: false }).order("name"),
-    requested ? loadLogs(requested) : null,
+    supabase.from("workers").select("id, name, is_active, created_at").order("is_active", { ascending: false }).order("name"),
+    loadLogs(requested),
   ]);
   if (workers.error) throw workers.error;
-  if (workers.data.length === 0) {
-    return (
-      <div className="grid grid-cols-1 gap-4">
-        <h1 className="text-2xl font-bold">Attendance</h1>
-        <p className="text-muted-foreground rounded-xl border border-dashed p-8 text-center">
-          No employees yet. Add them on the Employees tab.
-        </p>
-      </div>
-    );
-  }
-  const selectedId = requested && workers.data.some((w) => w.id === requested) ? requested : workers.data[0].id;
+  if (!workers.data.some((w) => w.id === requested)) redirect("/admin/attendance");
+  const selectedId = requested;
 
-  const logsRes = selectedId === requested && requestedLogs ? requestedLogs : await loadLogs(selectedId);
+  const logsRes = requestedLogs;
   if (logsRes.error) throw logsRes.error;
   const logs: Log[] = logsRes.data;
   const byDate = new Map(logs.map((l) => [l.date, l]));
   const selfies = new Map(logsRes.data.map((l) => [l.id, selfieIds(l.punch_selfies)]));
-  const workerName = workers.data.find((w) => w.id === selectedId)?.name ?? "";
+  const worker = workers.data.find((w) => w.id === selectedId)!;
+  const workerName = worker.name;
 
   // Totals match the salary: off days are recorded but not counted.
   const offDays = settings.off_days;
   const isOff = (d: string) => isOffDay(d, offDays);
+  // A working day with no record counts as absent, as on the all-employees view.
+  // Inactive employees have no leaving date, so only their recorded absences count.
+  const joined = joinedOn(worker, settings.timezone);
+  const recorded = new Set(logs.map((l) => l.date));
+  const missing = (from: string, to: string) =>
+    worker.is_active ? missingDays({ from, to, today, joined, offDays, recorded }) : 0;
+  const missingDay = (d: string) => missing(d, d) > 0;
   const done = logs.filter((l) => dayState(l) !== "open" && !isOff(l.date));
   const offDayWork = logs.filter((l) => dayState(l) !== "open" && isOff(l.date) && l.status !== "absent").length;
   const totals = {
     present: done.filter((l) => l.status === "present").length,
     half: done.filter((l) => l.status === "half_day").length,
-    absent: done.filter((l) => l.status === "absent").length,
+    absent: done.filter((l) => l.status === "absent").length + missing(range.from, range.to),
     minutes: done.reduce((s, l) => s + (l.total_minutes ?? 0), 0),
     ot: done.reduce((s, l) => s + (l.ot_minutes ?? 0), 0),
   };
 
   const href = (v: View, d: string) => `/admin/attendance?e=${selectedId}&view=${v}&d=${d}`;
-  const nextIsFuture = range.next > today;
+  const clampedTo = range.to < today ? range.to : today;
+  // The shown range up to today, for the Custom tab and for switching to all employees.
+  const pastRange = `from=${range.from <= clampedTo ? range.from : today}&to=${clampedTo}`;
+  const customHref = `/admin/attendance?e=${selectedId}&${pastRange}`;
+  const nextIsFuture = "next" in range && range.next > today;
+  const anchor = custom ? clampedTo : date; // the week / month / year tabs open around this day
   const time = (iso: string | null) =>
     iso
       ? new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", timeZone: settings.timezone }).format(
@@ -103,13 +124,18 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
     <div className="grid grid-cols-1 gap-4">
       <h1 className="text-2xl font-bold">Attendance</h1>
 
-      <EmployeePicker workers={workers.data} selected={selectedId} query={`view=${view}&d=${date}`} />
+      <EmployeePicker
+        workers={workers.data}
+        selected={selectedId}
+        employeeQuery={custom ? `from=${range.from}&to=${range.to}` : `view=${view}&d=${date}`}
+        allQuery={pastRange}
+      />
 
-      <div className="bg-muted grid grid-cols-3 gap-1 rounded-xl p-1" role="tablist" aria-label="Period">
-        {VIEWS.map((v) => (
+      <div className="bg-muted grid grid-cols-4 gap-1 rounded-xl p-1" role="tablist" aria-label="Period">
+        {[...VIEWS, "custom" as const].map((v) => (
           <Link
             key={v}
-            href={href(v, date)}
+            href={v === "custom" ? customHref : href(v, anchor)}
             role="tab"
             aria-selected={v === view}
             className={cn(
@@ -122,26 +148,30 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
         ))}
       </div>
 
-      <div className="flex items-center justify-between">
-        <Button asChild variant="ghost" size="icon" aria-label={`Previous ${view}`}>
-          <Link href={href(view, range.prev)}>
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <div className="text-center text-lg font-semibold" data-testid="range-label">
-          {range.label}
+      {view === "custom" ? (
+        <RangePicker from={range.from} to={range.to} today={today} employeeId={selectedId} />
+      ) : (
+        <div className="flex items-center justify-between">
+          <Button asChild variant="ghost" size="icon" aria-label={`Previous ${view}`}>
+            <Link href={href(view, (range as Range).prev)}>
+              <ChevronLeft />
+            </Link>
+          </Button>
+          <div className="text-center text-lg font-semibold" data-testid="range-label">
+            {range.label}
+          </div>
+          <Button asChild variant="ghost" size="icon" aria-label={`Next ${view}`}>
+            <Link
+              href={href(view, (range as Range).next)}
+              aria-disabled={nextIsFuture}
+              tabIndex={nextIsFuture ? -1 : undefined}
+              className={nextIsFuture ? "pointer-events-none opacity-30" : ""}
+            >
+              <ChevronRight />
+            </Link>
+          </Button>
         </div>
-        <Button asChild variant="ghost" size="icon" aria-label={`Next ${view}`}>
-          <Link
-            href={href(view, range.next)}
-            aria-disabled={nextIsFuture}
-            tabIndex={nextIsFuture ? -1 : undefined}
-            className={nextIsFuture ? "pointer-events-none opacity-30" : ""}
-          >
-            <ChevronRight />
-          </Link>
-        </Button>
-      </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2 text-center sm:grid-cols-5" data-testid="attendance-totals">
         <Stat label="Present" value={totals.present} className="bg-punch-in/10 text-punch-in" />
@@ -173,10 +203,18 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
       )}
 
       {view === "year" ? (
-        <YearTable year={range.from.slice(0, 4)} logs={logs.filter((l) => !isOff(l.date))} monthHref={(m) => href("month", m)} />
+        <YearTable
+          year={range.from.slice(0, 4)}
+          logs={logs.filter((l) => !isOff(l.date))}
+          missing={missing}
+          monthHref={(m) => href("month", m)}
+        />
       ) : (
         <ul className="divide-y rounded-xl border" data-testid="day-list">
-          {(view === "week" ? daysBetween(range.from, range.to) : logs.map((l) => l.date)).map((d) => {
+          {(view === "week" || (view === "custom" && dayCount(range.from, range.to) <= 62)
+            ? daysBetween(range.from, range.to)
+            : logs.map((l) => l.date)
+          ).map((d) => {
             const l = byDate.get(d);
             const st = l ? dayState(l) : null;
             const off = isOff(d);
@@ -210,9 +248,9 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
                   )}
                 </div>
                 {l && <SelfieThumbs selfies={selfies.get(l.id) ?? {}} name={workerName} />}
-                {st && (
-                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold", STATE[st].cell)}>
-                    {STATE[st].label}
+                {(st || missingDay(d)) && (
+                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold", STATE[st ?? "absent"].cell)}>
+                    {STATE[st ?? "absent"].label}
                   </span>
                 )}
                 {(l || d <= today) && (
@@ -229,15 +267,15 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
               </li>
             );
           })}
-          {view === "month" && logs.length === 0 && (
-            <li className="text-muted-foreground p-6 text-center text-sm">No attendance this month.</li>
+          {logs.length === 0 && (view === "month" || (view === "custom" && dayCount(range.from, range.to) > 62)) && (
+            <li className="text-muted-foreground p-6 text-center text-sm">No attendance in this period.</li>
           )}
         </ul>
       )}
 
       <Button asChild variant="secondary" className="justify-self-start">
         <Link href={`/admin/payroll/${selectedId}?from=${range.from}&to=${range.to}`}>
-          <FileText /> Salary slip for this {view}
+          <FileText /> Salary slip for this {view === "custom" ? "period" : view}
         </Link>
       </Button>
     </div>
@@ -319,7 +357,18 @@ function MonthGrid({
 }
 
 /** One row per month with the counts; tapping a month opens its calendar. */
-function YearTable({ year, logs, monthHref }: { year: string; logs: Log[]; monthHref: (date: string) => string }) {
+function YearTable({
+  year,
+  logs,
+  missing,
+  monthHref,
+}: {
+  year: string;
+  logs: Log[];
+  /** Working days with no record in from..to, counted as absent. */
+  missing: (from: string, to: string) => number;
+  monthHref: (date: string) => string;
+}) {
   const months = Array.from({ length: 12 }, (_, m) => {
     const prefix = `${year}-${String(m + 1).padStart(2, "0")}`;
     const ls = logs.filter((l) => l.date.startsWith(prefix) && dayState(l) !== "open");
@@ -328,7 +377,7 @@ function YearTable({ year, logs, monthHref }: { year: string; logs: Log[]; month
       first: `${prefix}-01`,
       present: ls.filter((l) => l.status === "present").length,
       half: ls.filter((l) => l.status === "half_day").length,
-      absent: ls.filter((l) => l.status === "absent").length,
+      absent: ls.filter((l) => l.status === "absent").length + missing(`${prefix}-01`, rangeFor("month", `${prefix}-01`).to),
       minutes: ls.reduce((s, l) => s + (l.total_minutes ?? 0), 0),
     };
   });

@@ -93,8 +93,9 @@ start) and ticks "Check location when employees punch".
 Both optional, on the Settings page.
 
 - **Business timing** (e.g. 10:30 AM to 7:30 PM). An employee can have their own timing instead
-  (part time), set in their Employees form. With a timing, a day is present when they worked at
-  least the timing minus 30 minutes, half day at half of it, absent below that; overtime is time
+  (part time), set in their Employees form. With a timing, a day is present when they worked
+  less than 1 h 30 min short of the timing (late in, early out or both), half day at half of it,
+  absent below that; overtime is time
   past the timing, and clocking in more than 10 minutes after the start shows a "Late" tag.
   Timings past midnight (night shift) work.
 - **No timing at all:** any day the employee clocks in and out is a full day, with no overtime.
@@ -174,9 +175,9 @@ employee (or a contact picker if no phone is saved) with the summary filled in.
 
 | Type | Base | Overtime |
 | --- | --- | --- |
-| Daily | present = daily rate, half day = 50% | hours past the timing × OT rate |
+| Daily | present or half day = daily rate; a half day marked by the owner = 50% | hours past the timing × OT rate |
 | Hourly | regular hours × hourly rate | OT hours × OT rate (hourly rate if OT rate is 0) |
-| Monthly | present = salary ÷ working days in month, half day = 50% of that | OT hours × OT rate |
+| Monthly | present or half day = salary ÷ working days in month; owner-marked half day = 50% of that | OT hours × OT rate |
 
 The business gives no cash advances, so the app has no advances screen and salary is the gross
 pay. (The `advances` table and the `advances_total` / `net_payable` columns of `payroll_report`

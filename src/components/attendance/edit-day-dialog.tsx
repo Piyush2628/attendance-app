@@ -136,8 +136,10 @@ function DayForm({ workerId, timeZone, today, log, date, onDone }: Props & { onD
         </div>
         <p className="text-muted-foreground text-xs">
           {status === "auto"
-            ? "Full day, half day or absent is worked out from the hours."
-            : "Your choice is kept whatever the hours say."}
+            ? "Worked out from the hours. A half day from the hours is paid as a full day."
+            : status === "half_day"
+              ? "Paid as half a day, whatever the hours say."
+              : "Your choice is kept whatever the hours say."}
         </p>
       </div>
 

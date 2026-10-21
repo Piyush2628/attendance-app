@@ -29,7 +29,7 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: "Clock in / out",
         short_name: "Punch",
-        url: "/punch",
+        url: "/punch?open",
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
       },
       {

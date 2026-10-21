@@ -10,6 +10,9 @@ export async function proxy(request: NextRequest) {
     // /punch?k=CODE (the owner's shared link): remember the business on this
     // device, then drop the code from the URL so a home-screen install works.
     const code = searchParams.get("k");
+    // An app icon installed before /start existed still opens /punch.
+    // Send the owner on to the dashboard from there too (see updateSession).
+    if (!code && pathname === "/punch" && isAppLaunch(request)) return updateSession(request);
     if (!code) return NextResponse.next();
     const url = request.nextUrl.clone();
     url.searchParams.delete("k");
@@ -19,6 +22,19 @@ export async function proxy(request: NextRequest) {
   }
 
   return updateSession(request);
+}
+
+/**
+ * A fresh open of /punch from outside the app (home screen icon, typed URL),
+ * not a tap on a link inside it. Query strings opt out, so the "Clock in / out"
+ * shortcut (/punch?open) always shows the punch screen.
+ */
+function isAppLaunch(request: NextRequest) {
+  return (
+    request.nextUrl.search === "" &&
+    request.headers.get("sec-fetch-mode") === "navigate" &&
+    request.headers.get("sec-fetch-site") === "none"
+  );
 }
 
 export const config = {

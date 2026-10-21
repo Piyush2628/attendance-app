@@ -52,8 +52,8 @@ select pg_temp.check((select total_minutes = 540 and ot_minutes = 60 and status 
                      'full day: 540 min, 60 OT, present');
 select pg_temp.check((select status = 'half_day' and ot_minutes = 0 from attendance_logs
                       where worker_id = '11111111-0000-0000-0000-000000000001' and date = '2026-09-02'), '5h = half day');
-select pg_temp.check((select status = 'absent' from attendance_logs
-                      where worker_id = '11111111-0000-0000-0000-000000000001' and date = '2026-09-03'), '2h = absent');
+select pg_temp.check((select status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000001' and date = '2026-09-03'), '2h = half day, never absent');
 -- Overnight shift is dated by clock-in day (IST)
 insert into attendance_logs (worker_id, clock_in, clock_out) values
   ('11111111-0000-0000-0000-000000000002', '2026-09-02 22:00+05:30', '2026-09-03 06:00+05:30');
@@ -233,9 +233,9 @@ select pg_temp.check((select status = 'half_day' from attendance_logs
 select pg_temp.check((select status = 'present' and ot_minutes = 120 and late_minutes = 0 from attendance_logs
                       where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-09'),
                      'business timing: 11h gives 2h overtime');
-select pg_temp.check((select status = 'absent' from attendance_logs
+select pg_temp.check((select status = 'half_day' from attendance_logs
                       where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-10'),
-                     'business timing: 3h30 is absent');
+                     'business timing: 3h30 is a half day, not absent');
 select pg_temp.check((select late_minutes = 0 from attendance_logs
                       where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-11'),
                      'early arrival is not late');
@@ -274,12 +274,13 @@ select pg_temp.check((select count(*) = 1 from attendance_logs
 select pg_temp.check((select base_pay = 1000 and days_present = 1 and half_days = 0
                       from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Kavita%'),
                      'monthly pay over working days, Sunday left out');
--- Anil: Mon 900 + Tue half (paid full) 900 + Wed 900 (2h OT = 200) + Fri 900 (30 min OT = 50); Sunday unpaid
-select pg_temp.check((select base_pay = 3600 and ot_pay = 250 and days_present = 3 and half_days = 1 and absent_days = 1
+-- Anil: Mon 900 + Tue half (paid full) 900 + Wed 900 (2h OT = 200) + Thu half (paid full) 900
+--       + Fri 900 (30 min OT = 50); Sunday unpaid
+select pg_temp.check((select base_pay = 4500 and ot_pay = 250 and days_present = 3 and half_days = 2 and absent_days = 0
                       from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Anil%'),
                      'daily pay leaves out Sunday');
 update owner_settings set off_days = '{}';
-select pg_temp.check((select base_pay = 4500 from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Anil%'),
+select pg_temp.check((select base_pay = 5400 from payroll_report('2026-09-01', '2026-09-30') where worker_name like 'Anil%'),
                      'with no off days, Sunday is paid');
 update owner_settings set off_days = '{0}';
 
@@ -311,6 +312,38 @@ select pg_temp.check((select base_pay = 3150 and half_days = 2
                       from payroll_report('2026-09-15', '2026-09-18') where worker_name like 'Anil%'),
                      'owner-marked half day is paid half');
 delete from attendance_logs where worker_id = '11111111-0000-0000-0000-000000000005' and date between '2026-09-15' and '2026-09-18';
+
+-- Day timing (07): a special timing for one date
+insert into attendance_logs (worker_id, clock_in, clock_out) values
+  ('11111111-0000-0000-0000-000000000005', '2026-09-21 11:40+05:30', '2026-09-21 17:00+05:30'), -- 5h20
+  ('11111111-0000-0000-0000-000000000006', '2026-09-21 14:05+05:30', '2026-09-21 17:00+05:30'), -- part timer 14-18
+  ('11111111-0000-0000-0000-000000000005', '2026-09-22 10:30+05:30', '2026-09-22 17:00+05:30'); -- no day timing
+select pg_temp.check((select status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-21'),
+                     'before the day timing: 5h20 of 9h is a half day');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+insert into day_timings (date, work_start, work_end) values ('2026-09-21', '11:30', '17:00');
+reset role;
+select pg_temp.check((select status = 'present' and late_minutes = 10 and ot_minutes = 0 from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-21'),
+                     'day timing 11:30-17:00: 5h20 is present, 10 min late');
+select pg_temp.check((select status = 'present' and late_minutes = 5 from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000006' and date = '2026-09-21'),
+                     'day timing: part timer judged on 14:00-17:00');
+select pg_temp.check((select status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-22'),
+                     'day timing only changes its own date');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select pg_temp.check((select count(*) = 0 from day_timings), 'B sees no day timings of A');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+delete from day_timings where date = '2026-09-21';
+reset role;
+select pg_temp.check((select status = 'half_day' from attendance_logs
+                      where worker_id = '11111111-0000-0000-0000-000000000005' and date = '2026-09-21'),
+                     'removing the day timing re-checks the day');
+delete from attendance_logs where date between '2026-09-21' and '2026-09-22';
 
 -- No timing at all: a day clocked in and out is present, with no overtime
 update owner_settings set work_start = null, work_end = null;

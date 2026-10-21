@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { isIsoDate } from "@/lib/admin/calendar";
 import { requireOwner } from "@/lib/admin/data";
 import { parseCoordinates } from "@/lib/geo";
 import { readTimingPair } from "@/lib/timing";
@@ -111,6 +112,32 @@ export async function saveSelfieRequired(_prev: SettingsState, formData: FormDat
     .from("owner_settings")
     .update({ selfie_required: formData.get("selfie_required") === "on" })
     .eq("owner_id", settings.owner_id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin", "layout");
+  return { ok: true, savedAt: Date.now() };
+}
+
+/**
+ * A special timing for one date (07_day_timings.sql), e.g. 11:30 to 17:00.
+ * That day's attendance is judged against it. Both times empty = back to the usual timing.
+ */
+export async function saveDayTiming(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
+  const date = String(formData.get("date") ?? "");
+  if (!isIsoDate(date)) return { error: "Choose a date." };
+  const timing = readTimingPair(formData);
+  if ("error" in timing) return { error: timing.error };
+
+  const { supabase, settings } = await requireOwner();
+  const { error } =
+    timing.work_start && timing.work_end
+      ? await supabase
+          .from("day_timings")
+          .upsert(
+            { owner_id: settings.owner_id, date, work_start: timing.work_start, work_end: timing.work_end },
+            { onConflict: "owner_id,date" },
+          )
+      : await supabase.from("day_timings").delete().eq("owner_id", settings.owner_id).eq("date", date);
   if (error) return { error: error.message };
 
   revalidatePath("/admin", "layout");

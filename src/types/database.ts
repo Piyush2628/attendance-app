@@ -207,6 +207,20 @@ export type Database = {
           },
         ];
       };
+      /** A special timing for one date (07_day_timings.sql). */
+      day_timings: {
+        Row: {
+          owner_id: string;
+          /** yyyy-mm-dd */
+          date: string;
+          work_start: string;
+          work_end: string;
+          created_at: string;
+        };
+        Insert: { owner_id?: string; date: string; work_start: string; work_end: string };
+        Update: { work_start?: string; work_end?: string };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -256,6 +270,7 @@ export type Worker = Database["public"]["Tables"]["workers"]["Row"];
 export type AttendanceLog = Database["public"]["Tables"]["attendance_logs"]["Row"];
 export type Advance = Database["public"]["Tables"]["advances"]["Row"];
 export type OwnerSettings = Database["public"]["Tables"]["owner_settings"]["Row"];
+export type DayTiming = Database["public"]["Tables"]["day_timings"]["Row"];
 
 // ---- RPC result shapes (jsonb functions) -------------------------------------
 

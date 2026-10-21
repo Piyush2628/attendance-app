@@ -2,11 +2,12 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
 import { DayTimingCard } from "@/components/admin/day-timing-card";
-import { STATE, dayState, type DayState } from "@/components/attendance/day-state";
+import { STATE, dayState, hideUnless, type DayState, type FilterStatus } from "@/components/attendance/day-state";
 import { EditDayDialog } from "@/components/attendance/edit-day-dialog";
 import { EmployeePicker } from "@/components/attendance/employee-picker";
 import { LateTag, SelfieThumbs } from "@/components/attendance/punch-tags";
 import { RangePicker } from "@/components/attendance/range-picker";
+import { FilterButton, FilterNote, StatusFilter } from "@/components/attendance/status-filter";
 import { WorkerAvatar } from "@/components/worker-avatar";
 import { SELFIE_IDS, selfieIds, type requireOwner } from "@/lib/admin/data";
 import { addDays, daysBetween, missingDays } from "@/lib/admin/calendar";
@@ -94,7 +95,8 @@ export async function AllEmployees({ owner, from, to }: { owner: Owner; from: st
           {isOffDay(from, settings.off_days) && single && (
             <p className="text-muted-foreground -mt-2 text-sm">Off day ({offDaysLabel(settings.off_days)}), not paid.</p>
           )}
-          {content}
+          {/* A new day or range starts unfiltered. */}
+          <StatusFilter key={`${from}_${to}`}>{content}</StatusFilter>
         </>
       )}
     </div>
@@ -156,11 +158,13 @@ function DayView({
     .filter(({ w, log }) => log || (w.is_active && joinedOn(w, settings.timezone) <= date));
 
   const count = (...s: RowState[]) => rows.filter((r) => s.includes(r.state)).length;
-  const stats = [
-    { label: "Present", value: count("present"), className: "bg-punch-in/10 text-punch-in" },
-    { label: "Half day", value: count("half_day"), className: "bg-amber-500/10 text-amber-700" },
-    { label: "Absent", value: count("absent", "no_record"), className: "bg-punch-out/10 text-punch-out" },
+  const stats: { status: FilterStatus; label: string; value: number; className: string; on: string }[] = [
+    { status: "present", label: "Present", value: count("present"), className: "bg-punch-in/10 text-punch-in", on: "ring-punch-in" },
+    { status: "half", label: "Half day", value: count("half_day"), className: "bg-amber-500/10 text-amber-700", on: "ring-amber-500" },
+    { status: "absent", label: "Absent", value: count("absent", "no_record"), className: "bg-punch-out/10 text-punch-out", on: "ring-punch-out" },
   ];
+  const matches = (state: RowState): FilterStatus[] =>
+    state === "present" ? ["present"] : state === "half_day" ? ["half"] : state === "absent" || state === "no_record" ? ["absent"] : [];
   const pending = [
     count("open") > 0 && `${count("open")} still in`,
     count("not_in") > 0 && `${count("not_in")} not in yet`,
@@ -171,12 +175,19 @@ function DayView({
       <DayTimingCard key={date} date={date} dayTiming={dayTiming} usual={settings} />
       <div className="grid grid-cols-3 gap-2 text-center" data-testid="day-totals">
         {stats.map((s) => (
-          <div key={s.label} className={cn("rounded-xl p-2", s.className)}>
+          <FilterButton
+            key={s.status}
+            status={s.status}
+            empty={s.value === 0}
+            className={cn("rounded-xl p-2", s.className)}
+            onClassName={cn("ring-2", s.on)}
+          >
             <div className="text-xl font-bold tabular-nums">{s.value}</div>
             <div className="text-xs font-medium">{s.label}</div>
-          </div>
+          </FilterButton>
         ))}
       </div>
+      <FilterNote />
       {pending.length > 0 && (
         <p className="text-muted-foreground -mt-2 text-center text-sm">{pending.join(" · ")}</p>
       )}
@@ -185,7 +196,7 @@ function DayView({
         {rows.map(({ w, log, state }) => {
           const chip = state in STATE ? STATE[state as DayState] : EXTRA[state as keyof typeof EXTRA];
           return (
-            <li key={w.id} className="flex items-center gap-3 px-3 py-2" data-state={state}>
+            <li key={w.id} className={cn("flex items-center gap-3 px-3 py-2", hideUnless(matches(state)))} data-state={state}>
               <WorkerAvatar name={w.name} photoUrl={w.photo_url} className="size-10 text-sm" />
               <div className="min-w-0 flex-1">
                 <Link
@@ -267,23 +278,38 @@ function RangeView({
     })
     .filter((r) => r.hasAny || r.counted);
 
+  const heads = [
+    { status: "present", key: "present", label: "Present", className: "text-punch-in", on: "bg-punch-in/10 ring-punch-in" },
+    { status: "half", key: "half", label: "Half day", className: "text-amber-700", on: "bg-amber-500/10 ring-amber-500" },
+    { status: "absent", key: "absent", label: "Absent", className: "text-punch-out", on: "bg-punch-out/10 ring-punch-out" },
+  ] as const;
+
   return (
     <>
       <p className="text-muted-foreground -mt-2 text-center text-sm">
         {workingDays.length} working {workingDays.length === 1 ? "day" : "days"}
         {offDaysLabel(offDays) ? ` · ${offDaysLabel(offDays)} not counted` : ""}
       </p>
+      <FilterNote />
       <div className="overflow-hidden rounded-xl border" data-testid="range-table">
         <div className="bg-muted/50 grid grid-cols-[1fr_repeat(3,3.25rem)_1rem] items-center gap-1.5 px-3 py-2 text-xs font-semibold">
           <span>Employee</span>
-          <span className="text-punch-in text-center">Present</span>
-          <span className="text-center text-amber-700">Half day</span>
-          <span className="text-punch-out text-center">Absent</span>
+          {heads.map((h) => (
+            <FilterButton
+              key={h.status}
+              status={h.status}
+              empty={!rows.some((r) => r[h.key] > 0)}
+              className={cn("rounded-md py-1 text-center leading-tight", h.className)}
+              onClassName={cn("ring-2", h.on)}
+            >
+              {h.label}
+            </FilterButton>
+          ))}
           <span />
         </div>
         <ul className="divide-y">
           {rows.map((r) => (
-            <li key={r.w.id} data-testid="range-row">
+            <li key={r.w.id} data-testid="range-row" className={hideUnless(heads.filter((h) => r[h.key] > 0).map((h) => h.status))}>
               <Link
                 href={`/admin/attendance?e=${r.w.id}&from=${from}&to=${to}`}
                 prefetch={false}

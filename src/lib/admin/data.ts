@@ -60,7 +60,7 @@ export async function getTodayBoard() {
   const { supabase, settings, today } = await requireOwner();
 
   const since = new Date(Date.now() - OPEN_WINDOW_MS).toISOString();
-  const [workers, logs, open] = await Promise.all([
+  const [workers, logs, open, dayTiming] = await Promise.all([
     supabase
       .from("workers")
       .select("id, name, photo_url, work_start, work_end")
@@ -73,10 +73,12 @@ export async function getTodayBoard() {
       .is("clock_out", null)
       .not("clock_in", "is", null)
       .gt("clock_in", since),
+    supabase.from("day_timings").select("work_start, work_end").eq("date", today).maybeSingle(),
   ]);
   if (workers.error) throw workers.error;
   if (logs.error) throw logs.error;
   if (open.error) throw open.error;
+  if (dayTiming.error) throw dayTiming.error;
 
   const todayByWorker = new Map(logs.data.map((l) => [l.worker_id, l]));
   const openByWorker = new Map(open.data.map((l) => [l.worker_id, l]));
@@ -92,5 +94,5 @@ export async function getTodayBoard() {
     return { worker, log, openLog, state, selfies: selfieIds(shown?.punch_selfies) };
   });
 
-  return { settings, today, rows };
+  return { settings, today, rows, dayTiming: dayTiming.data };
 }

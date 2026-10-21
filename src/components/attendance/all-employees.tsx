@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
+import { DayTimingCard } from "@/components/admin/day-timing-card";
 import { STATE, dayState, type DayState } from "@/components/attendance/day-state";
 import { EditDayDialog } from "@/components/attendance/edit-day-dialog";
 import { EmployeePicker } from "@/components/attendance/employee-picker";
@@ -12,7 +13,7 @@ import { addDays, daysBetween, missingDays } from "@/lib/admin/calendar";
 import { isoDate } from "@/lib/format";
 import { isOffDay, offDaysLabel } from "@/lib/timing";
 import { cn } from "@/lib/utils";
-import type { AttendanceLog } from "@/types/database";
+import type { AttendanceLog, DayTiming } from "@/types/database";
 
 type Owner = Awaited<ReturnType<typeof requireOwner>>;
 type Worker = { id: string; name: string; photo_url: string | null; is_active: boolean; created_at: string };
@@ -38,17 +39,19 @@ export async function AllEmployees({ owner, from, to }: { owner: Owner; from: st
   let workers: Worker[];
   let content: React.ReactNode;
   if (single) {
-    const [w, logs] = await Promise.all([
+    const [w, logs, dayTiming] = await Promise.all([
       workersQuery,
       supabase
         .from("attendance_logs")
         .select(`id, worker_id, date, clock_in, clock_out, status, manual_override, late_minutes, notes, ${SELFIE_IDS}`)
         .eq("date", from),
+      supabase.from("day_timings").select("work_start, work_end").eq("date", from).maybeSingle(),
     ]);
     if (w.error) throw w.error;
     if (logs.error) throw logs.error;
+    if (dayTiming.error) throw dayTiming.error;
     workers = w.data;
-    content = <DayView owner={owner} date={from} workers={workers} logs={logs.data} />;
+    content = <DayView owner={owner} date={from} workers={workers} logs={logs.data} dayTiming={dayTiming.data} />;
   } else {
     const logsPage = (n: number, count = false) =>
       supabase
@@ -116,7 +119,19 @@ const EXTRA: Record<"no_record" | "not_in" | "off", { label: string; cell: strin
   off: { label: "Off day", cell: "border border-dashed text-muted-foreground" },
 };
 
-function DayView({ owner, date, workers, logs }: { owner: Owner; date: string; workers: Worker[]; logs: DayLog[] }) {
+function DayView({
+  owner,
+  date,
+  workers,
+  logs,
+  dayTiming,
+}: {
+  owner: Owner;
+  date: string;
+  workers: Worker[];
+  logs: DayLog[];
+  dayTiming: Pick<DayTiming, "work_start" | "work_end"> | null;
+}) {
   const { settings, today } = owner;
   const off = isOffDay(date, settings.off_days);
   const byWorker = new Map(logs.map((l) => [l.worker_id, l]));
@@ -153,6 +168,7 @@ function DayView({ owner, date, workers, logs }: { owner: Owner; date: string; w
 
   return (
     <>
+      <DayTimingCard key={date} date={date} dayTiming={dayTiming} usual={settings} />
       <div className="grid grid-cols-3 gap-2 text-center" data-testid="day-totals">
         {stats.map((s) => (
           <div key={s.label} className={cn("rounded-xl p-2", s.className)}>

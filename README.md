@@ -32,6 +32,9 @@ supabase/
   migrations/03_function_grants.sql  owner-only functions not callable by anon
   migrations/04_gps.sql        work location + radius, location stored on each punch
   migrations/05_timings_selfies.sql  optional work timings, off days, punch selfies
+  migrations/06_half_day_pay.sql     half day margin and pay
+  migrations/07_day_timings.sql      a special timing for one date
+  migrations/08_holidays.sql         holidays (paid or unpaid), absent days in payroll
   tests/                       plain-Postgres behaviour tests for the migration
 src/
   proxy.ts                     refreshes the owner's session, guards /admin
@@ -44,6 +47,7 @@ src/
       attendance/              one employee's week / month / year (?e=&view=&d=); add, edit, delete days
       selfie/[id]/             a punch selfie as a JPEG (owner only, by RLS)
       settings/                punch link, work timings, location check, selfie
+      holidays/                the year's holidays: add, change, delete; India's national holidays in one tap
       payroll/                 salary report, ?from=&to= (default: this month)
       payroll/[workerId]/      printable A4 / phone salary slip
     punch/                     worker kiosk + personal phone mode (step 3)
@@ -58,6 +62,7 @@ src/
     admin/period.ts            pay period from ?from=&to=
     admin/calendar.ts          week / month / year ranges for the attendance page
     timing.ts                  work timings, off days, owner-time-zone conversions
+    holidays.ts                holiday helpers, colours, name suggestions
   types/database.ts            typed schema + RPC result shapes
 ```
 
@@ -103,6 +108,22 @@ Both optional, on the Settings page.
   salary. A monthly salary is divided over the month's working days (days that aren't off days).
 
 Changing a timing applies to punches from then on; past days keep their status.
+
+## Holidays
+
+Open **Holidays** (calendar icon in the header, or Settings → Holidays). Add a date and a name
+(Diwali, Holi, …). With an Indian business, one tap adds Republic Day, Independence Day and Gandhi
+Jayanti for the year.
+
+- Every holiday is paid, and nobody is marked absent on one. A day with no punch that isn't a
+  holiday or an off day is absent and not paid.
+- A holiday is paid as one day to every employee who was working for you then: the daily
+  rate, one day of the monthly salary (salary ÷ the month's working days), or one shift of hours for
+  hourly staff. It is added once the day has passed, as "Paid holidays" on the payroll and slip.
+- A holiday on an off day (e.g. a Sunday) adds nothing; it was a day off anyway.
+- Punches on a holiday are kept and shown, but like off days they are not paid on top.
+- The Today page, the Attendance pages (violet **H** in the calendar) and the punch screens show
+  the day's holiday.
 
 ## Selfie at punch
 
@@ -178,6 +199,9 @@ employee (or a contact picker if no phone is saved) with the summary filled in.
 | Daily | present or half day = daily rate; a half day marked by the owner = 50% | hours past the timing × OT rate |
 | Hourly | regular hours × hourly rate | OT hours × OT rate (hourly rate if OT rate is 0) |
 | Monthly | present or half day = salary ÷ working days in month; owner-marked half day = 50% of that | OT hours × OT rate |
+
+A paid holiday adds one day on top of this (see Holidays). The absent count includes working days with
+no record at all (since the employee was added, up to yesterday), the same as the Attendance page.
 
 The business gives no cash advances, so the app has no advances screen and salary is the gross
 pay. (The `advances` table and the `advances_total` / `net_payable` columns of `payroll_report`

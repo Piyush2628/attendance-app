@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Clock, Phone } from "lucide-react";
 
 import { WorkerActiveToggle } from "@/components/admin/worker-active-toggle";
 import { WorkerFormDialog } from "@/components/admin/worker-form-dialog";
@@ -13,14 +13,15 @@ import type { Worker } from "@/types/database";
 
 export const metadata = { title: "Employees" };
 
-function payLine(w: Worker) {
+function payLine(w: Worker, currency: string) {
+  const money = (n: number) => formatMoney(n, currency);
   const base =
     w.wage_type === "daily"
-      ? `${formatMoney(w.daily_rate)}/day`
+      ? `${money(w.daily_rate)}/day`
       : w.wage_type === "hourly"
-        ? `${formatMoney(w.hourly_rate)}/hour`
-        : `${formatMoney(w.monthly_salary)}/month`;
-  const ot = Number(w.ot_rate_per_hour) > 0 ? ` · OT ${formatMoney(w.ot_rate_per_hour)}/h` : "";
+        ? `${money(w.hourly_rate)}/hour`
+        : `${money(w.monthly_salary)}/month`;
+  const ot = Number(w.ot_rate_per_hour) > 0 ? ` · OT ${money(w.ot_rate_per_hour)}/h` : "";
   return `${base}${ot}`;
 }
 
@@ -55,7 +56,13 @@ export default async function WorkersPage() {
 
       <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
         {active.map((w) => (
-          <WorkerCard key={w.id} worker={w} ownerId={settings.owner_id} businessTiming={businessTiming} />
+          <WorkerCard
+            key={w.id}
+            worker={w}
+            ownerId={settings.owner_id}
+            businessTiming={businessTiming}
+            currency={settings.currency}
+          />
         ))}
       </ul>
 
@@ -66,7 +73,13 @@ export default async function WorkersPage() {
           </summary>
           <ul className="mt-2 grid grid-cols-1 gap-2 opacity-70 md:grid-cols-2">
             {inactive.map((w) => (
-              <WorkerCard key={w.id} worker={w} ownerId={settings.owner_id} businessTiming={businessTiming} />
+              <WorkerCard
+                key={w.id}
+                worker={w}
+                ownerId={settings.owner_id}
+                businessTiming={businessTiming}
+                currency={settings.currency}
+              />
             ))}
           </ul>
         </details>
@@ -79,40 +92,48 @@ function WorkerCard({
   worker,
   ownerId,
   businessTiming,
+  currency,
 }: {
   worker: Worker;
   ownerId: string;
   businessTiming: string | null;
+  currency: string;
 }) {
   const ownTiming = timingLabel(worker);
   return (
-    <li className="bg-card flex items-center gap-3 rounded-xl border p-3">
+    <li className="bg-card flex items-start gap-3 rounded-xl border p-3">
       <WorkerAvatar name={worker.name} photoUrl={worker.photo_url} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate font-semibold">{worker.name}</span>
+        <div className="leading-tight font-semibold break-words">{worker.name}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           <Badge variant="secondary" className="capitalize">
             {worker.wage_type}
           </Badge>
+          <span className="text-muted-foreground">{payLine(worker, currency)}</span>
         </div>
-        <div className="text-muted-foreground truncate text-sm">{payLine(worker)}</div>
         {ownTiming && (
-          <div className="text-muted-foreground truncate text-xs" data-testid="own-timing">
-            Own timing {ownTiming}
+          <div className="text-muted-foreground mt-1 flex items-center gap-1 text-xs" data-testid="own-timing">
+            <Clock className="size-3 shrink-0" /> Own timing {ownTiming}
           </div>
         )}
-        {worker.phone && <div className="text-muted-foreground text-xs">{worker.phone}</div>}
+        {worker.phone && (
+          <div className="text-muted-foreground mt-0.5 flex items-center gap-1 text-xs">
+            <Phone className="size-3 shrink-0" /> {worker.phone}
+          </div>
+        )}
+        {!worker.is_active && (
+          <div className="mt-1 -ml-2">
+            <WorkerActiveToggle workerId={worker.id} active={worker.is_active} name={worker.name} />
+          </div>
+        )}
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        <div className="flex gap-1">
-          <Button asChild variant="outline" size="sm" aria-label={`Attendance of ${worker.name}`}>
-            <Link href={`/admin/attendance?e=${worker.id}`} prefetch={false}>
-              <CalendarDays />
-            </Link>
-          </Button>
-          <WorkerFormDialog ownerId={ownerId} worker={worker} businessTiming={businessTiming} />
-        </div>
-        <WorkerActiveToggle workerId={worker.id} active={worker.is_active} name={worker.name} />
+      <div className="flex shrink-0 gap-1">
+        <Button asChild variant="outline" size="icon" aria-label={`Attendance of ${worker.name}`}>
+          <Link href={`/admin/attendance?e=${worker.id}`} prefetch={false}>
+            <CalendarDays />
+          </Link>
+        </Button>
+        <WorkerFormDialog ownerId={ownerId} worker={worker} businessTiming={businessTiming} />
       </div>
     </li>
   );

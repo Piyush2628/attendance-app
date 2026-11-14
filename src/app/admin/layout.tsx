@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogOut, Settings } from "lucide-react";
+import { CalendarHeart, LogOut, Settings } from "lucide-react";
 
 import { signOut } from "@/app/login/actions";
 import { BottomNav, TopNav } from "@/components/admin/admin-nav";
@@ -11,12 +11,21 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const { settings } = await requireOwner();
 
   return (
-    <div className="flex flex-1 flex-col pb-20 md:pb-0">
+    // The phone tab bar is the last item of this full-height column and sticks to the
+    // bottom (not position: fixed). iOS home-screen apps drew the fixed bar too high
+    // while a short page or the loading skeleton was showing.
+    <div className="flex flex-1 flex-col">
       <header className="no-print border-b px-4 py-2">
         <nav className="mx-auto flex max-w-5xl items-center gap-6">
           <span className="min-w-0 truncate font-bold">{settings.business_name}</span>
           <TopNav />
           <div className="ml-auto flex shrink-0 items-center">
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/holidays">
+                <CalendarHeart /> <span className="hidden sm:inline">Holidays</span>
+                <span className="sr-only sm:hidden">Holidays</span>
+              </Link>
+            </Button>
             <Button asChild variant="ghost" size="sm">
               <Link href="/admin/settings">
                 <Settings /> <span className="hidden sm:inline">Settings</span>

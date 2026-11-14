@@ -4,6 +4,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { isoDate } from "@/lib/format";
+import { holidayMap } from "@/lib/holidays";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceLog, OwnerSettings, Worker } from "@/types/database";
 
@@ -29,6 +30,20 @@ export const requireOwner = cache(async () => {
 
   return { supabase, settings, today: isoDate(new Date(), settings.timezone) };
 });
+
+type Client = Awaited<ReturnType<typeof createClient>>;
+
+/** The owner's holidays from `from` to `to`, by date (08_holidays.sql). */
+export async function loadHolidays(supabase: Client, from: string, to: string) {
+  const { data, error } = await supabase
+    .from("holidays")
+    .select("date, name, paid")
+    .gte("date", from)
+    .lte("date", to)
+    .order("date");
+  if (error) throw error;
+  return holidayMap(data);
+}
 
 export type BoardState = "in" | "done" | "marked" | "not_in";
 
@@ -60,7 +75,7 @@ export async function getTodayBoard() {
   const { supabase, settings, today } = await requireOwner();
 
   const since = new Date(Date.now() - OPEN_WINDOW_MS).toISOString();
-  const [workers, logs, open, dayTiming] = await Promise.all([
+  const [workers, logs, open, dayTiming, holidays] = await Promise.all([
     supabase
       .from("workers")
       .select("id, name, photo_url, work_start, work_end")
@@ -74,6 +89,7 @@ export async function getTodayBoard() {
       .not("clock_in", "is", null)
       .gt("clock_in", since),
     supabase.from("day_timings").select("work_start, work_end").eq("date", today).maybeSingle(),
+    loadHolidays(supabase, today, today),
   ]);
   if (workers.error) throw workers.error;
   if (logs.error) throw logs.error;
@@ -94,5 +110,5 @@ export async function getTodayBoard() {
     return { worker, log, openLog, state, selfies: selfieIds(shown?.punch_selfies) };
   });
 
-  return { settings, today, rows, dayTiming: dayTiming.data };
+  return { settings, today, rows, dayTiming: dayTiming.data, holiday: holidays.get(today) ?? null };
 }

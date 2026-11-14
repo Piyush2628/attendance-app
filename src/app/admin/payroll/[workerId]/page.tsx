@@ -5,10 +5,11 @@ import { ArrowLeft, MessageCircle } from "lucide-react";
 import { EditDayDialog } from "@/components/attendance/edit-day-dialog";
 import { PrintButton } from "@/components/payroll/print-button";
 import { Button } from "@/components/ui/button";
-import { requireOwner } from "@/lib/admin/data";
+import { loadHolidays, requireOwner } from "@/lib/admin/data";
 import { formatHours, getPayroll, WAGE_LABEL, WAGE_LABEL_HI } from "@/lib/admin/payroll";
 import { parsePeriod, periodQuery } from "@/lib/admin/period";
 import { formatMinutes, formatMoney } from "@/lib/format";
+import { HOLIDAY_STYLE } from "@/lib/holidays";
 import { effectiveTiming, isOffDay, offDaysLabel, timingLabel } from "@/lib/timing";
 import { cn } from "@/lib/utils";
 import type { AttendanceStatus, PayrollRow } from "@/types/database";
@@ -30,7 +31,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
   const { supabase, settings, today } = await requireOwner();
   const period = parsePeriod(await searchParams, today);
 
-  const [worker, logs, payroll] = await Promise.all([
+  const [worker, logs, payroll, holidays] = await Promise.all([
     supabase
       .from("workers")
       .select("id, name, phone, wage_type, daily_rate, hourly_rate, monthly_salary, ot_rate_per_hour, work_start, work_end")
@@ -44,6 +45,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
       .lte("date", period.to)
       .order("date"),
     getPayroll(supabase, period),
+    loadHolidays(supabase, period.from, period.to),
   ]);
   if (worker.error) throw worker.error;
   if (logs.error) throw logs.error;
@@ -69,6 +71,8 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
       gross_pay: 0,
       advances_total: 0,
       net_payable: 0,
+      paid_holidays: 0,
+      holiday_pay: 0,
     } satisfies PayrollRow);
 
   const money = (n: number | string) => formatMoney(n, settings.currency);
@@ -82,9 +86,11 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
 
   const timing = timingLabel(effectiveTiming(w, settings));
   const isOff = (d: string) => isOffDay(d, settings.off_days);
-  // Same rule as payroll_report(): a half day from the hours is paid in full, one marked by the owner is paid half.
+  // Same rule as payroll_report(): off days and holidays are not paid from punches,
+  // a half day from the hours is paid in full, one marked by the owner is paid half.
+  const notCounted = (d: string) => isOff(d) || holidays.has(d);
   const paidDays = logs.data.reduce((sum, l) => {
-    if (isOff(l.date) || (!l.manual_override && l.clock_in && !l.clock_out)) return sum;
+    if (notCounted(l.date) || (!l.manual_override && l.clock_in && !l.clock_out)) return sum;
     if (l.status === "present") return sum + 1;
     if (l.status === "half_day") return sum + (l.manual_override ? 0.5 : 1);
     return sum;
@@ -100,12 +106,25 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
     hourly: `${formatHours(Math.max(p.worked_hours - p.ot_hours, 0))} h × ${money(w.hourly_rate)}`,
     monthly: `${formatHours(paidDays)} days of ${money(w.monthly_salary)} / month`,
   }[w.wage_type];
+  const holidayText = {
+    daily: `${p.paid_holidays} × ${money(w.daily_rate)}`,
+    hourly: `${p.paid_holidays} × one shift`,
+    monthly: `${p.paid_holidays} ${p.paid_holidays === 1 ? "day" : "days"} of salary`,
+  }[w.wage_type];
+
+  // The daily table: every attendance day, plus holidays with no attendance.
+  type Row = { date: string; log: (typeof logs.data)[number] | null };
+  const rows: Row[] = [
+    ...logs.data.map((l) => ({ date: l.date, log: l })),
+    ...[...holidays.keys()].filter((d) => !logs.data.some((l) => l.date === d)).map((d) => ({ date: d, log: null })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
 
   const shareText = [
     `*Salary slip* – ${settings.business_name}`,
     `${w.name} · ${period.label}`,
     `Present: ${p.days_present}, Half days: ${p.half_days}, OT: ${formatHours(p.ot_hours)} h`,
     `Base pay: ${money(p.base_pay)}, Overtime: ${money(p.ot_pay)}`,
+    ...(p.paid_holidays > 0 ? [`Paid holidays: ${p.paid_holidays} (${money(p.holiday_pay)})`] : []),
     `*Salary: ${money(p.gross_pay)}*`,
   ].join("\n");
   const waNumber = whatsappNumber(w.phone, settings.currency);
@@ -153,10 +172,11 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
           <Field label="Timing" value={`${timing ?? "No fixed timing"} · OT ${money(otRate)} / h`} />
         </section>
 
-        <section className="grid grid-cols-3 gap-2 text-center sm:grid-cols-5">
+        <section className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
           <Box label="Present" sub="हाज़िर" value={p.days_present} />
           <Box label="Half days" sub="आधा दिन" value={p.half_days} />
           <Box label="Absent" sub="ग़ैरहाज़िर" value={p.absent_days} />
+          <Box label="Paid holidays" sub="छुट्टी" value={p.paid_holidays} />
           <Box label="Hours worked" sub="घंटे" value={formatHours(p.worked_hours)} />
           <Box label="OT hours" sub="ओवरटाइम" value={formatHours(p.ot_hours)} />
         </section>
@@ -172,6 +192,9 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
           <caption className="pb-1 text-left font-semibold">Earnings · कमाई</caption>
           <tbody className="divide-y divide-neutral-200">
             <Line label="Base pay" note={baseText} amount={money(p.base_pay)} />
+            {p.paid_holidays > 0 && (
+              <Line label="Paid holidays · छुट्टी" note={holidayText} amount={money(p.holiday_pay)} />
+            )}
             <Line label="Overtime" note={`${formatHours(p.ot_hours)} h × ${money(otRate)}`} amount={money(p.ot_pay)} />
           </tbody>
         </table>
@@ -199,7 +222,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
               />
             </div>
           </div>
-          {logs.data.length === 0 ? (
+          {rows.length === 0 ? (
             <p className="text-sm text-neutral-600">No attendance recorded in this period.</p>
           ) : (
             <table className="w-full text-sm">
@@ -217,9 +240,25 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
-                {logs.data.map((l) => {
+                {rows.map(({ date, log: l }) => {
+                  const holiday = holidays.get(date);
+                  if (!l) {
+                    return (
+                      <tr key={date} className="break-inside-avoid">
+                        <td className="py-1 whitespace-nowrap">{day(date)}</td>
+                        <td className="py-1 text-neutral-600" colSpan={3}>
+                          {holiday?.name}
+                        </td>
+                        <td className="hidden sm:table-cell print:table-cell" />
+                        <td className={cn("py-1 text-right font-medium", HOLIDAY_STYLE.text)}>
+                          {isOff(date) ? "Off day" : "Holiday"}
+                        </td>
+                        <td className="no-print" />
+                      </tr>
+                    );
+                  }
                   const open = !l.manual_override && l.clock_in && !l.clock_out;
-                  const off = isOff(l.date);
+                  const off = isOff(l.date) || Boolean(holiday);
                   return (
                     <tr key={l.id} className={cn("break-inside-avoid", off && "text-neutral-500")}>
                       <td className="py-1 whitespace-nowrap">{day(l.date)}</td>
@@ -237,7 +276,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
                           open || off ? "text-neutral-500" : STATUS[l.status].className,
                         )}
                       >
-                        {open ? "Still in" : off ? "Off day" : STATUS[l.status].label}
+                        {open ? "Still in" : holiday ? "Holiday" : off ? "Off day" : STATUS[l.status].label}
                         {l.manual_override && <span className="text-neutral-500"> *</span>}
                       </td>
                       <td className="no-print py-0.5 text-right">
@@ -259,7 +298,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
           {logs.data.some((l) => l.manual_override) && (
             <p className="pt-1 text-xs text-neutral-500">* Marked by owner</p>
           )}
-          {logs.data.some((l) => l.status === "half_day" && !isOff(l.date)) && (
+          {logs.data.some((l) => l.status === "half_day" && !notCounted(l.date)) && (
             <p className="pt-1 text-xs text-neutral-500">
               Half days are paid as a full day unless marked by owner (*), which pays half.
             </p>
@@ -267,6 +306,12 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
           {logs.data.some((l) => isOff(l.date)) && (
             <p className="pt-1 text-xs text-neutral-500">
               Off days ({offDaysLabel(settings.off_days)}) are shown but not counted in the salary.
+            </p>
+          )}
+          {holidays.size > 0 && (
+            <p className="pt-1 text-xs text-neutral-500">
+              Paid holidays are paid as one day each once they have passed. Work on a holiday is shown but not paid
+              on top.
             </p>
           )}
         </section>

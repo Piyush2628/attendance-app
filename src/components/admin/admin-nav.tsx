@@ -44,7 +44,7 @@ export function TopNav() {
 export function BottomNav() {
   const isActive = useActive();
   return (
-    <nav className="no-print bg-background fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav className="no-print bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky bottom-0 z-40 grid grid-cols-4 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       {NAV.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}

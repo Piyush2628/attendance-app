@@ -1,4 +1,4 @@
-// Hand-written to match supabase/migrations/ (01 to 05).
+// Hand-written to match supabase/migrations/ (01 to 08).
 // Once a Supabase project exists, regenerate with:
 //   npx supabase gen types typescript --project-id <id> > src/types/database.ts
 // (then re-add the RPC result types at the bottom of this file).
@@ -221,6 +221,20 @@ export type Database = {
         Update: { work_start?: string; work_end?: string };
         Relationships: [];
       };
+      /** Holidays (08_holidays.sql). Paid ones are paid as a day to everyone. */
+      holidays: {
+        Row: {
+          owner_id: string;
+          /** yyyy-mm-dd */
+          date: string;
+          name: string;
+          paid: boolean;
+          created_at: string;
+        };
+        Insert: { owner_id?: string; date: string; name: string; paid?: boolean };
+        Update: { date?: string; name?: string; paid?: boolean };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -271,6 +285,7 @@ export type AttendanceLog = Database["public"]["Tables"]["attendance_logs"]["Row
 export type Advance = Database["public"]["Tables"]["advances"]["Row"];
 export type OwnerSettings = Database["public"]["Tables"]["owner_settings"]["Row"];
 export type DayTiming = Database["public"]["Tables"]["day_timings"]["Row"];
+export type Holiday = Database["public"]["Tables"]["holidays"]["Row"];
 
 // ---- RPC result shapes (jsonb functions) -------------------------------------
 
@@ -300,6 +315,9 @@ export type PayrollRow = {
   gross_pay: number;
   advances_total: number;
   net_payable: number;
+  /** Paid holidays that fell on working days in the period (08_holidays.sql). */
+  paid_holidays: number;
+  holiday_pay: number;
 };
 
 export type PunchErrorCode =
@@ -336,6 +354,8 @@ export type PunchError = {
   accuracy_m?: number | null;
 };
 
+export type TodayHoliday = { name: string; paid: boolean };
+
 export type WorkerSummary = {
   ok: true;
   worker: { id: string; name: string; photo_url: string | null; standard_shift_hours: number };
@@ -343,6 +363,8 @@ export type WorkerSummary = {
   gps_required: boolean;
   /** The owner turned on selfies: send a photo with every punch. */
   selfie_required: boolean;
+  /** Today's holiday, if the owner set one. */
+  holiday?: TodayHoliday | null;
   clocked_in: boolean;
   clock_in_at: string | null;
   today_minutes: number;
@@ -363,6 +385,7 @@ export type KioskWorkerList =
       business_name: string;
       gps_required: boolean;
       selfie_required: boolean;
+      holiday?: TodayHoliday | null;
       workers: { id: string; name: string; photo_url: string | null; clocked_in: boolean }[];
     }
   | PunchError;

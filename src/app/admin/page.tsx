@@ -1,12 +1,17 @@
+import Link from "next/link";
+import { CalendarHeart } from "lucide-react";
+
 import { AttendanceBoard } from "@/components/admin/attendance-board";
 import { DayTimingCard } from "@/components/admin/day-timing-card";
 import { getTodayBoard } from "@/lib/admin/data";
+import { HOLIDAY_STYLE } from "@/lib/holidays";
 import { isOffDay } from "@/lib/timing";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Today" };
 
 export default async function AdminHome() {
-  const { settings, today, rows, dayTiming } = await getTodayBoard();
+  const { settings, today, rows, dayTiming, holiday } = await getTodayBoard();
   const dateLabel = new Intl.DateTimeFormat("en-IN", {
     weekday: "long",
     day: "numeric",
@@ -22,7 +27,23 @@ export default async function AdminHome() {
         <p className="text-muted-foreground text-sm">{dateLabel}</p>
       </div>
       <DayTimingCard key={today} date={today} dayTiming={dayTiming} usual={settings} />
-      {offDay && (
+      {holiday && (
+        <Link
+          href="/admin/holidays"
+          className={cn("flex items-start gap-2 rounded-xl p-3 text-sm", HOLIDAY_STYLE.soft)}
+          data-testid="holiday-note"
+        >
+          <CalendarHeart className="mt-0.5 size-4 shrink-0" />
+          <span>
+            <span className="font-semibold">Holiday: {holiday.name}</span>
+            {" · "}
+            {offDay
+              ? "Nobody is marked absent."
+              : "Everyone gets a day's pay and nobody is marked absent."}
+          </span>
+        </Link>
+      )}
+      {offDay && !holiday && (
         <p className="rounded-xl bg-sky-500/10 p-3 text-sm text-sky-800" data-testid="off-day-note">
           Today is an off day. Punches are recorded but not counted in the salary.
         </p>

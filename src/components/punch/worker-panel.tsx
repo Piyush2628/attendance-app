@@ -2,6 +2,7 @@
 
 import { Camera, Loader2, LogIn, LogOut, MapPin } from "lucide-react";
 
+import { HolidayBanner } from "@/components/punch/holiday-banner";
 import { Button } from "@/components/ui/button";
 import { WorkerAvatar } from "@/components/worker-avatar";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,8 @@ export function WorkerPanel({
           </div>
         </div>
       </div>
+
+      <HolidayBanner holiday={summary.holiday} className="self-stretch" />
 
       <Button
         variant={clockedIn ? "punchOut" : "punchIn"}

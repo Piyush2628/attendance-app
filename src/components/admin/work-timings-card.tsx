@@ -29,13 +29,20 @@ export function WorkTimingsCard({
         <Clock className="text-muted-foreground mt-0.5 size-5 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="font-semibold">Work timings</div>
-          <p className="text-muted-foreground text-sm">
-            Optional. With a timing set, the app marks late arrivals, half days and overtime. Up to 1 h 29 min short
-            still counts as a full day; less is a half day. Anyone who clocks in is never absent. Half days are paid in
-            full unless you mark them. Without a timing, any day an employee clocks in and out counts as a full day.
-            Part-timers can have their own timing on the Employees page. For a day with different hours, change the
-            timing on the Today page.
-          </p>
+          <p className="text-muted-foreground text-sm">Optional. Used for late marks, half days and overtime.</p>
+          <details className="group mt-1 text-sm">
+            <summary className="text-primary cursor-pointer list-none font-medium underline-offset-2 hover:underline [&::-webkit-details-marker]:hidden">
+              How days are counted
+            </summary>
+            <ul className="text-muted-foreground mt-2 grid list-disc gap-1 pl-4">
+              <li>Up to 1 h 29 min short is still a full day; less is a half day.</li>
+              <li>Anyone who clocks in is never absent.</li>
+              <li>Half days are paid in full unless you mark them.</li>
+              <li>No timing set: any day clocked in and out is a full day.</li>
+              <li>Part-timers can have their own timing on the Employees page.</li>
+              <li>For one day with different hours, change the timing on the Today page.</li>
+            </ul>
+          </details>
         </div>
       </div>
 

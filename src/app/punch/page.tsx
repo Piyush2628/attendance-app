@@ -26,7 +26,12 @@ export default async function PunchPage() {
     const list = data as KioskWorkerList | null;
     if (list?.ok)
       return (
-        <KioskApp businessName={list.business_name} initialWorkers={list.workers} gpsRequired={list.gps_required} />
+        <KioskApp
+          businessName={list.business_name}
+          initialWorkers={list.workers}
+          initialHoliday={list.holiday ?? null}
+          gpsRequired={list.gps_required}
+        />
       );
     return (
       <Centered>

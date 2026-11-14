@@ -9,7 +9,7 @@ import { EmployeePicker } from "@/components/attendance/employee-picker";
 import { RangePicker } from "@/components/attendance/range-picker";
 import { LateTag, SelfieThumbs } from "@/components/attendance/punch-tags";
 import { Button } from "@/components/ui/button";
-import { requireOwner, SELFIE_IDS, selfieIds } from "@/lib/admin/data";
+import { loadHolidays, requireOwner, SELFIE_IDS, selfieIds } from "@/lib/admin/data";
 import {
   dayCount,
   daysBetween,
@@ -26,6 +26,7 @@ import {
   type View,
 } from "@/lib/admin/calendar";
 import { formatMinutes } from "@/lib/format";
+import { HOLIDAY_STYLE, type HolidayMap } from "@/lib/holidays";
 import { isOffDay, offDaysLabel } from "@/lib/timing";
 import { cn } from "@/lib/utils";
 import type { AttendanceLog } from "@/types/database";
@@ -70,9 +71,10 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
       .gte("date", range.from)
       .lte("date", range.to)
       .order("date");
-  const [workers, requestedLogs] = await Promise.all([
+  const [workers, requestedLogs, holidays] = await Promise.all([
     supabase.from("workers").select("id, name, is_active, created_at").order("is_active", { ascending: false }).order("name"),
     loadLogs(requested),
+    loadHolidays(supabase, range.from, range.to),
   ]);
   if (workers.error) throw workers.error;
   if (!workers.data.some((w) => w.id === requested)) redirect("/admin/attendance");
@@ -86,24 +88,28 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
   const worker = workers.data.find((w) => w.id === selectedId)!;
   const workerName = worker.name;
 
-  // Totals match the salary: off days are recorded but not counted.
+  // Totals match the salary: off days and holidays are recorded but not counted.
   const offDays = settings.off_days;
   const isOff = (d: string) => isOffDay(d, offDays);
+  const notCounted = (d: string) => isOff(d) || holidays.has(d);
   // A working day with no record counts as absent, as on the all-employees view.
   // Inactive employees have no leaving date, so only their recorded absences count.
   const joined = joinedOn(worker, settings.timezone);
   const recorded = new Set(logs.map((l) => l.date));
   const missing = (from: string, to: string) =>
-    worker.is_active ? missingDays({ from, to, today, joined, offDays, recorded }) : 0;
+    worker.is_active ? missingDays({ from, to, today, joined, offDays, recorded, holidays }) : 0;
   const missingDay = (d: string) => missing(d, d) > 0;
-  const done = logs.filter((l) => dayState(l) !== "open" && !isOff(l.date));
-  const offDayWork = logs.filter((l) => dayState(l) !== "open" && isOff(l.date) && l.status !== "absent").length;
+  const done = logs.filter((l) => dayState(l) !== "open" && !notCounted(l.date));
+  const offDayWork = logs.filter((l) => dayState(l) !== "open" && notCounted(l.date) && l.status !== "absent").length;
+  // Holidays on working days, since the employee was added and up to today (as on the salary slip).
+  const holidayDays = [...holidays.keys()].filter((d) => !isOff(d) && d >= joined && d <= today);
   const totals = {
     present: done.filter((l) => l.status === "present").length,
     half: done.filter((l) => l.status === "half_day").length,
     absent: done.filter((l) => l.status === "absent").length + missing(range.from, range.to),
     minutes: done.reduce((s, l) => s + (l.total_minutes ?? 0), 0),
     ot: done.reduce((s, l) => s + (l.ot_minutes ?? 0), 0),
+    holidays: holidayDays.length,
   };
 
   const href = (v: View, d: string) => `/admin/attendance?e=${selectedId}&view=${v}&d=${d}`;
@@ -173,21 +179,24 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-2 text-center sm:grid-cols-5" data-testid="attendance-totals">
+      <div className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6" data-testid="attendance-totals">
         <Stat label="Present" value={totals.present} className="bg-punch-in/10 text-punch-in" />
         <Stat label="Half days" value={totals.half} className="bg-amber-500/10 text-amber-700" />
         <Stat label="Absent" value={totals.absent} className="bg-punch-out/10 text-punch-out" />
+        <Stat label="Holidays" value={totals.holidays} className={HOLIDAY_STYLE.soft} />
         <Stat label="Hours" value={formatMinutes(totals.minutes)} className="bg-muted" />
         <Stat label="Overtime" value={formatMinutes(totals.ot)} className="bg-muted" />
       </div>
       {offDayWork > 0 && (
         <p className="text-muted-foreground -mt-2 text-sm" data-testid="off-day-work">
-          Also came in on {offDayWork} off {offDayWork === 1 ? "day" : "days"} ({offDaysLabel(offDays)}), not counted in
-          the salary.
+          Also came in on {offDayWork} {offDayWork === 1 ? "day" : "days"} off
+          {offDaysLabel(offDays) ? ` (${offDaysLabel(offDays)} or holidays)` : " (holidays)"}, not counted in the salary.
         </p>
       )}
 
-      {view === "month" && <MonthGrid from={range.from} to={range.to} today={today} byDate={byDate} isOff={isOff} />}
+      {view === "month" && (
+        <MonthGrid from={range.from} to={range.to} today={today} byDate={byDate} isOff={isOff} holidays={holidays} />
+      )}
 
       {view !== "year" && (
         <div className="-mb-2 flex items-center justify-between">
@@ -205,7 +214,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
       {view === "year" ? (
         <YearTable
           year={range.from.slice(0, 4)}
-          logs={logs.filter((l) => !isOff(l.date))}
+          logs={logs.filter((l) => !notCounted(l.date))}
+          holidays={holidayDays}
           missing={missing}
           monthHref={(m) => href("month", m)}
         />
@@ -218,15 +228,22 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
             const l = byDate.get(d);
             const st = l ? dayState(l) : null;
             const off = isOff(d);
+            const holiday = holidays.get(d);
             return (
-              <li key={d} className={cn("flex items-center gap-3 px-3 py-2", off && "bg-muted/40")}>
+              <li key={d} className={cn("flex items-center gap-3 px-3 py-2", (off || holiday) && "bg-muted/40")}>
                 <div className="w-24 shrink-0 text-sm font-medium">
                   {shortDay(d)}
-                  {off && <div className="text-muted-foreground text-xs font-normal">Off day</div>}
+                  {holiday ? (
+                    <div className={cn("truncate text-xs font-normal", HOLIDAY_STYLE.text)} title={holiday.name}>
+                      {holiday.name}
+                    </div>
+                  ) : (
+                    off && <div className="text-muted-foreground text-xs font-normal">Off day</div>
+                  )}
                 </div>
                 <div className="text-muted-foreground min-w-0 flex-1 text-sm">
                   {!l ? (
-                    d > today || off ? "" : "No record"
+                    d > today || off || holiday ? "" : "No record"
                   ) : l.clock_in ? (
                     <>
                       {time(l.clock_in)} – {l.clock_out ? time(l.clock_out) : "…"}
@@ -241,17 +258,24 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
                   {l && (
                     <div className="mt-0.5 flex flex-wrap gap-1 empty:hidden">
                       <LateTag minutes={l.late_minutes} />
-                      {off && l.status !== "absent" && dayState(l) !== "open" && (
-                        <span className="text-xs">Not paid</span>
+                      {(off || holiday) && l.status !== "absent" && dayState(l) !== "open" && (
+                        <span className="text-xs">{holiday?.paid && !off ? "Holiday pay instead" : "Not paid"}</span>
                       )}
                     </div>
                   )}
                 </div>
                 {l && <SelfieThumbs selfies={selfies.get(l.id) ?? {}} name={workerName} />}
-                {(st || missingDay(d)) && (
+                {st || missingDay(d) ? (
                   <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold", STATE[st ?? "absent"].cell)}>
                     {STATE[st ?? "absent"].label}
                   </span>
+                ) : (
+                  holiday &&
+                  !off && (
+                    <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold", HOLIDAY_STYLE.cell)}>
+                      Holiday
+                    </span>
+                  )
                 )}
                 {(l || d <= today) && (
                   <EditDayDialog
@@ -293,19 +317,21 @@ function Stat({ label, value, className }: { label: string; value: React.ReactNo
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/** Calendar for one month: a coloured square per day (P / ½ / A). Off days are dashed and not paid. */
+/** Calendar for one month: a coloured square per day (P / ½ / A / H). Off days are dashed and not paid. */
 function MonthGrid({
   from,
   to,
   today,
   byDate,
   isOff,
+  holidays,
 }: {
   from: string;
   to: string;
   today: string;
   byDate: Map<string, Log>;
   isOff: (date: string) => boolean;
+  holidays: HolidayMap;
 }) {
   const lead = (weekday(from) + 6) % 7; // empty cells before the 1st (weeks start Monday)
   return (
@@ -323,28 +349,34 @@ function MonthGrid({
           const l = byDate.get(d);
           const st = l ? dayState(l) : null;
           const off = isOff(d);
+          const holiday = holidays.get(d);
           return (
             <div
               key={d}
-              title={`${shortDay(d)}${st ? `: ${STATE[st].label}` : ""}${off ? " (off day, not paid)" : ""}`}
-              data-state={st ?? "none"}
+              title={`${shortDay(d)}${holiday ? ` · ${holiday.name}` : ""}${st ? `: ${STATE[st].label}` : ""}${off ? " (off day, not paid)" : ""}`}
+              data-state={st ?? (holiday ? "holiday" : "none")}
               data-off={off || undefined}
               className={cn(
                 "flex aspect-square flex-col items-center justify-center rounded-lg text-sm leading-tight",
                 st
                   ? STATE[st].cell
-                  : off
-                    ? "text-muted-foreground border border-dashed"
-                    : d > today
-                      ? "text-muted-foreground/50"
-                      : "bg-muted text-muted-foreground",
-                st && off && "opacity-60",
+                  : holiday
+                    ? HOLIDAY_STYLE.cell
+                    : off
+                      ? "text-muted-foreground border border-dashed"
+                      : d > today
+                        ? "text-muted-foreground/50"
+                        : "bg-muted text-muted-foreground",
+                st && (off || holiday) && "opacity-60",
+                st && holiday && "ring-2 ring-violet-600 ring-inset",
                 d === today && "ring-primary ring-2 ring-offset-1",
               )}
             >
               <span className="font-semibold">{Number(d.slice(8))}</span>
               {st ? (
                 <span className="text-[10px] font-bold">{STATE[st].short}</span>
+              ) : holiday ? (
+                <span className="text-[10px] font-bold">{HOLIDAY_STYLE.short}</span>
               ) : (
                 off && <span className="text-[10px]">Off</span>
               )}
@@ -360,11 +392,14 @@ function MonthGrid({
 function YearTable({
   year,
   logs,
+  holidays,
   missing,
   monthHref,
 }: {
   year: string;
   logs: Log[];
+  /** Holidays on working days, up to today. */
+  holidays: string[];
   /** Working days with no record in from..to, counted as absent. */
   missing: (from: string, to: string) => number;
   monthHref: (date: string) => string;
@@ -378,6 +413,7 @@ function YearTable({
       present: ls.filter((l) => l.status === "present").length,
       half: ls.filter((l) => l.status === "half_day").length,
       absent: ls.filter((l) => l.status === "absent").length + missing(`${prefix}-01`, rangeFor("month", `${prefix}-01`).to),
+      holidays: holidays.filter((d) => d.startsWith(prefix)).length,
       minutes: ls.reduce((s, l) => s + (l.total_minutes ?? 0), 0),
     };
   });
@@ -390,12 +426,15 @@ function YearTable({
             <th className="text-punch-in p-2 text-right font-medium">P</th>
             <th className="p-2 text-right font-medium text-amber-700">½</th>
             <th className="text-punch-out p-2 text-right font-medium">A</th>
+            <th className={cn("p-2 text-right font-medium", HOLIDAY_STYLE.text)} title="Holidays">
+              H
+            </th>
             <th className="p-2 text-right font-medium">Hours</th>
           </tr>
         </thead>
         <tbody className="divide-y">
           {months.map((r) => (
-            <tr key={r.m} className={cn(r.present + r.half + r.absent === 0 && "text-muted-foreground")}>
+            <tr key={r.m} className={cn(r.present + r.half + r.absent + r.holidays === 0 && "text-muted-foreground")}>
               <td className="p-0">
                 <Link href={monthHref(r.first)} prefetch={false} className="block p-2 font-medium underline-offset-2 hover:underline">
                   {monthName(r.m)}
@@ -404,6 +443,7 @@ function YearTable({
               <td className="p-2 text-right tabular-nums">{r.present}</td>
               <td className="p-2 text-right tabular-nums">{r.half}</td>
               <td className="p-2 text-right tabular-nums">{r.absent}</td>
+              <td className="p-2 text-right tabular-nums">{r.holidays}</td>
               <td className="p-2 text-right tabular-nums">{formatMinutes(r.minutes)}</td>
             </tr>
           ))}

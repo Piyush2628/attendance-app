@@ -40,8 +40,9 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
 
       <PeriodPicker path="/admin/payroll" period={period} today={today} />
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className={cn("grid grid-cols-3 gap-2", totals.holiday > 0 && "grid-cols-2 sm:grid-cols-4")}>
         <Stat label="Base pay" value={money(totals.base)} />
+        {totals.holiday > 0 && <Stat label="Holiday pay" value={money(totals.holiday)} />}
         <Stat label="Overtime pay" value={money(totals.ot)} />
         <Stat label="Total salary" value={money(totals.salary)} strong />
       </div>
@@ -50,7 +51,8 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
         <p className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           {totals.openPunches === 1 ? "1 shift is" : `${totals.openPunches} shifts are`} still clocked in and not
-          counted yet. Clock them out from the Today page to include them.
+          counted yet. Open the employee&apos;s slip and add the out time with the pencil on the &ldquo;Still in&rdquo;
+          day, or clock them out from the Today page if they are still working.
         </p>
       )}
 
@@ -75,9 +77,10 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
                       <div className="text-xl font-bold">{money(r.gross_pay)}</div>
                     </div>
                   </div>
-                  <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <dl className="mt-2 grid grid-cols-4 gap-2 text-sm">
                     <Cell label="Present" value={r.days_present} />
                     <Cell label="Half days" value={r.half_days} />
+                    <Cell label="Holidays" value={r.paid_holidays} />
                     <Cell label="OT hours" value={formatHours(r.ot_hours)} />
                   </dl>
                   <div className="text-primary mt-2 flex items-center gap-1 text-sm font-medium">
@@ -97,8 +100,10 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
                   <th className="p-2 font-medium">Type</th>
                   <th className="p-2 text-right font-medium">Days Present</th>
                   <th className="p-2 text-right font-medium">Half Days</th>
+                  <th className="p-2 text-right font-medium">Paid Holidays</th>
                   <th className="p-2 text-right font-medium">OT Hours</th>
                   <th className="p-2 text-right font-medium">Base Pay</th>
+                  <th className="p-2 text-right font-medium">Holiday Pay</th>
                   <th className="p-2 text-right font-medium">OT Pay</th>
                   <th className="p-2 text-right font-medium">Salary</th>
                   <th className="no-print p-2 font-medium">
@@ -113,8 +118,10 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
                     <td className="p-2">{WAGE_LABEL[r.wage_type]}</td>
                     <td className="p-2 text-right tabular-nums">{r.days_present}</td>
                     <td className="p-2 text-right tabular-nums">{r.half_days}</td>
+                    <td className="p-2 text-right tabular-nums">{r.paid_holidays}</td>
                     <td className="p-2 text-right tabular-nums">{formatHours(r.ot_hours)}</td>
                     <td className="p-2 text-right tabular-nums">{money(r.base_pay)}</td>
+                    <td className="p-2 text-right tabular-nums">{money(r.holiday_pay)}</td>
                     <td className="p-2 text-right tabular-nums">{money(r.ot_pay)}</td>
                     <td className="p-2 text-right font-semibold tabular-nums">{money(r.gross_pay)}</td>
                     <td className="no-print p-2 text-right">
@@ -129,10 +136,11 @@ export default async function PayrollPage({ searchParams }: PageProps<"/admin/pa
               </tbody>
               <tfoot className="bg-muted/50 font-semibold">
                 <tr>
-                  <td className="p-2" colSpan={5}>
+                  <td className="p-2" colSpan={6}>
                     Total
                   </td>
                   <td className="p-2 text-right tabular-nums">{money(totals.base)}</td>
+                  <td className="p-2 text-right tabular-nums">{money(totals.holiday)}</td>
                   <td className="p-2 text-right tabular-nums">{money(totals.ot)}</td>
                   <td className="p-2 text-right tabular-nums">{money(totals.salary)}</td>
                   <td className="no-print" />

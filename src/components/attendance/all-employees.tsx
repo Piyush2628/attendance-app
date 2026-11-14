@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { CalendarHeart, ChevronRight } from "lucide-react";
 
 import { DayTimingCard } from "@/components/admin/day-timing-card";
 import { STATE, dayState, hideUnless, type DayState, type FilterStatus } from "@/components/attendance/day-state";
@@ -9,9 +9,10 @@ import { LateTag, SelfieThumbs } from "@/components/attendance/punch-tags";
 import { RangePicker } from "@/components/attendance/range-picker";
 import { FilterButton, FilterNote, StatusFilter } from "@/components/attendance/status-filter";
 import { WorkerAvatar } from "@/components/worker-avatar";
-import { SELFIE_IDS, selfieIds, type requireOwner } from "@/lib/admin/data";
+import { loadHolidays, SELFIE_IDS, selfieIds, type requireOwner } from "@/lib/admin/data";
 import { addDays, daysBetween, missingDays } from "@/lib/admin/calendar";
 import { isoDate } from "@/lib/format";
+import { HOLIDAY_STYLE, type HolidayInfo, type HolidayMap } from "@/lib/holidays";
 import { isOffDay, offDaysLabel } from "@/lib/timing";
 import { cn } from "@/lib/utils";
 import type { AttendanceLog, DayTiming } from "@/types/database";
@@ -40,19 +41,29 @@ export async function AllEmployees({ owner, from, to }: { owner: Owner; from: st
   let workers: Worker[];
   let content: React.ReactNode;
   if (single) {
-    const [w, logs, dayTiming] = await Promise.all([
+    const [w, logs, dayTiming, holidays] = await Promise.all([
       workersQuery,
       supabase
         .from("attendance_logs")
         .select(`id, worker_id, date, clock_in, clock_out, status, manual_override, late_minutes, notes, ${SELFIE_IDS}`)
         .eq("date", from),
       supabase.from("day_timings").select("work_start, work_end").eq("date", from).maybeSingle(),
+      loadHolidays(supabase, from, from),
     ]);
     if (w.error) throw w.error;
     if (logs.error) throw logs.error;
     if (dayTiming.error) throw dayTiming.error;
     workers = w.data;
-    content = <DayView owner={owner} date={from} workers={workers} logs={logs.data} dayTiming={dayTiming.data} />;
+    content = (
+      <DayView
+        owner={owner}
+        date={from}
+        workers={workers}
+        logs={logs.data}
+        dayTiming={dayTiming.data}
+        holiday={holidays.get(from) ?? null}
+      />
+    );
   } else {
     const logsPage = (n: number, count = false) =>
       supabase
@@ -62,7 +73,7 @@ export async function AllEmployees({ owner, from, to }: { owner: Owner; from: st
         .lte("date", to)
         .order("id")
         .range(n * PAGE, n * PAGE + PAGE - 1);
-    const [w, first] = await Promise.all([workersQuery, logsPage(0, true)]);
+    const [w, first, holidays] = await Promise.all([workersQuery, logsPage(0, true), loadHolidays(supabase, from, to)]);
     if (w.error) throw w.error;
     if (first.error) throw first.error;
     const pages = Math.ceil((first.count ?? 0) / PAGE);
@@ -73,7 +84,7 @@ export async function AllEmployees({ owner, from, to }: { owner: Owner; from: st
       logs.push(...r.data);
     }
     workers = w.data;
-    content = <RangeView owner={owner} from={from} to={to} workers={workers} logs={logs} />;
+    content = <RangeView owner={owner} from={from} to={to} workers={workers} logs={logs} holidays={holidays} />;
   }
 
   return (
@@ -92,6 +103,7 @@ export async function AllEmployees({ owner, from, to }: { owner: Owner; from: st
             allQuery={`from=${from}&to=${to}`}
           />
           <RangePicker from={from} to={to} today={today} />
+          {/* DayView shows its own holiday banner. */}
           {isOffDay(from, settings.off_days) && single && (
             <p className="text-muted-foreground -mt-2 text-sm">Off day ({offDaysLabel(settings.off_days)}), not paid.</p>
           )}
@@ -113,12 +125,13 @@ type DayLog = Pick<
   "id" | "worker_id" | "date" | "clock_in" | "clock_out" | "status" | "manual_override" | "late_minutes" | "notes"
 > & { punch_selfies: { id: string; kind: string }[] | null };
 
-type RowState = DayState | "no_record" | "not_in" | "off";
+type RowState = DayState | "no_record" | "not_in" | "off" | "holiday";
 
-const EXTRA: Record<"no_record" | "not_in" | "off", { label: string; cell: string }> = {
+const EXTRA: Record<"no_record" | "not_in" | "off" | "holiday", { label: string; cell: string }> = {
   no_record: { label: "Absent", cell: STATE.absent.cell },
   not_in: { label: "Not in yet", cell: "bg-muted text-muted-foreground" },
   off: { label: "Off day", cell: "border border-dashed text-muted-foreground" },
+  holiday: { label: "Holiday", cell: HOLIDAY_STYLE.cell },
 };
 
 function DayView({
@@ -127,12 +140,14 @@ function DayView({
   workers,
   logs,
   dayTiming,
+  holiday,
 }: {
   owner: Owner;
   date: string;
   workers: Worker[];
   logs: DayLog[];
   dayTiming: Pick<DayTiming, "work_start" | "work_end"> | null;
+  holiday: HolidayInfo | null;
 }) {
   const { settings, today } = owner;
   const off = isOffDay(date, settings.off_days);
@@ -150,6 +165,7 @@ function DayView({
       const log = byWorker.get(w.id) ?? null;
       let state: RowState;
       if (log) state = dayState(log);
+      else if (holiday) state = "holiday";
       else if (off) state = "off";
       else if (date >= today) state = "not_in";
       else state = "no_record";
@@ -172,6 +188,19 @@ function DayView({
 
   return (
     <>
+      {holiday && (
+        <Link
+          href={`/admin/holidays?y=${date.slice(0, 4)}`}
+          className={cn("-mt-2 flex items-center gap-2 rounded-xl p-3 text-sm", HOLIDAY_STYLE.soft)}
+          data-testid="holiday-note"
+        >
+          <CalendarHeart className="size-4 shrink-0" />
+          <span>
+            <span className="font-semibold">{holiday.name}</span> ·{" "}
+            {holiday.paid && !off ? "paid holiday, nobody is absent" : "holiday, nobody is absent"}
+          </span>
+        </Link>
+      )}
       <DayTimingCard key={date} date={date} dayTiming={dayTiming} usual={settings} />
       <div className="grid grid-cols-3 gap-2 text-center" data-testid="day-totals">
         {stats.map((s) => (
@@ -242,30 +271,39 @@ function RangeView({
   to,
   workers,
   logs,
+  holidays,
 }: {
   owner: Owner;
   from: string;
   to: string;
   workers: Worker[];
   logs: RangeLog[];
+  holidays: HolidayMap;
 }) {
   const { settings, today } = owner;
   const offDays = settings.off_days;
   const lastClosed = to < today ? to : addDays(today, -1);
-  const workingDays = daysBetween(from, to < today ? to : today).filter((d) => !isOffDay(d, offDays));
+  // Same rule as the salary: off days and holidays are recorded but not counted.
+  const counted = (d: string) => !isOffDay(d, offDays) && !holidays.has(d);
+  const shown = daysBetween(from, to < today ? to : today);
+  const workingDays = shown.filter(counted);
+  const holidayCount = shown.filter((d) => holidays.has(d) && !isOffDay(d, offDays)).length;
 
   const byWorker = new Map<string, RangeLog[]>();
-  for (const l of logs) byWorker.set(l.worker_id, [...(byWorker.get(l.worker_id) ?? []), l]);
+  for (const l of logs) {
+    const list = byWorker.get(l.worker_id);
+    if (list) list.push(l);
+    else byWorker.set(l.worker_id, [l]);
+  }
 
-  // Same rule as the salary: off days are recorded but not counted.
   const rows = workers
     .map((w) => {
       const ls = byWorker.get(w.id) ?? [];
       const joined = joinedOn(w, settings.timezone);
-      const working = ls.filter((l) => !isOffDay(l.date, offDays));
+      const working = ls.filter((l) => counted(l.date));
       const recorded = new Set(working.map((l) => l.date));
       // Inactive employees have no leaving date, so only their recorded absences count.
-      const noRecord = w.is_active ? missingDays({ from, to, today, joined, offDays, recorded }) : 0;
+      const noRecord = w.is_active ? missingDays({ from, to, today, joined, offDays, recorded, holidays }) : 0;
       const states = working.map(dayState);
       return {
         w,
@@ -288,6 +326,7 @@ function RangeView({
     <>
       <p className="text-muted-foreground -mt-2 text-center text-sm">
         {workingDays.length} working {workingDays.length === 1 ? "day" : "days"}
+        {holidayCount > 0 && ` · ${holidayCount} ${holidayCount === 1 ? "holiday" : "holidays"}`}
         {offDaysLabel(offDays) ? ` · ${offDaysLabel(offDays)} not counted` : ""}
       </p>
       <FilterNote />

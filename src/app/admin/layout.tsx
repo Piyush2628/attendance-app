@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogOut, Settings } from "lucide-react";
+import { CalendarHeart, LogOut, Settings } from "lucide-react";
 
 import { signOut } from "@/app/login/actions";
 import { BottomNav, TopNav } from "@/components/admin/admin-nav";
@@ -17,6 +17,12 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           <span className="min-w-0 truncate font-bold">{settings.business_name}</span>
           <TopNav />
           <div className="ml-auto flex shrink-0 items-center">
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/holidays">
+                <CalendarHeart /> <span className="hidden sm:inline">Holidays</span>
+                <span className="sr-only sm:hidden">Holidays</span>
+              </Link>
+            </Button>
             <Button asChild variant="ghost" size="sm">
               <Link href="/admin/settings">
                 <Settings /> <span className="hidden sm:inline">Settings</span>

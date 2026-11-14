@@ -123,6 +123,7 @@ export function shiftRange(from: string, to: string, by: 1 | -1) {
 /**
  * Working days from `from` to `to` with no attendance record, counted as absent.
  * Only days since the employee was added, and only up to yesterday (today isn't over yet).
+ * Off days and holidays are never absent (same rule as payroll_report()).
  */
 export function missingDays(opts: {
   from: string;
@@ -131,10 +132,13 @@ export function missingDays(opts: {
   joined: string;
   offDays: number[];
   recorded: Set<string>;
+  holidays?: { has(date: string): boolean };
 }) {
   const start = opts.from > opts.joined ? opts.from : opts.joined;
   const yesterday = addDays(opts.today, -1);
   const end = opts.to < yesterday ? opts.to : yesterday;
   if (start > end) return 0;
-  return daysBetween(start, end).filter((d) => !opts.offDays.includes(weekday(d)) && !opts.recorded.has(d)).length;
+  return daysBetween(start, end).filter(
+    (d) => !opts.offDays.includes(weekday(d)) && !opts.recorded.has(d) && !opts.holidays?.has(d),
+  ).length;
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, LayoutDashboard, Smartphone } from "lucide-react";
 
 import { kioskPunch, kioskVerify, listKioskWorkers } from "@/app/punch/actions";
+import { HolidayBanner } from "@/components/punch/holiday-banner";
 import { errorMessage, OFFLINE_ERROR } from "@/components/punch/messages";
 import { PinPad } from "@/components/punch/pin-pad";
 import { punchWithChecks } from "@/components/punch/punch-with-checks";
@@ -17,7 +18,7 @@ import { WorkerAvatar } from "@/components/worker-avatar";
 import { warmUpLocation } from "@/lib/geo";
 import { useWakeLock } from "@/lib/pwa";
 import { cn } from "@/lib/utils";
-import type { PunchError, WorkerSummary } from "@/types/database";
+import type { PunchError, TodayHoliday, WorkerSummary } from "@/types/database";
 
 type KioskWorker = { id: string; name: string; photo_url: string | null; clocked_in: boolean };
 
@@ -33,14 +34,18 @@ const IDLE_MS = 20_000; // back to the worker list if nobody touches the screen
 export function KioskApp({
   businessName,
   initialWorkers,
+  initialHoliday,
   gpsRequired,
 }: {
   businessName: string;
   initialWorkers: KioskWorker[];
+  initialHoliday: TodayHoliday | null;
   gpsRequired: boolean;
 }) {
   const { takeSelfie, camera, cameraOpen } = useSelfieCamera();
   const [workers, setWorkers] = useState(initialWorkers);
+  // Refreshed with the list, so a tablet left on overnight picks up the next day's holiday.
+  const [holiday, setHoliday] = useState(initialHoliday);
   const [step, setStep] = useState<Step>({ kind: "grid" });
   const [busy, setBusy] = useState<false | "punch" | "location">(false);
   const [error, setError] = useState<PunchError | null>(null);
@@ -63,7 +68,10 @@ export function KioskApp({
 
   const refresh = useCallback(async () => {
     const res = await listKioskWorkers().catch(() => null);
-    if (res?.ok) setWorkers(res.workers);
+    if (res?.ok) {
+      setWorkers(res.workers);
+      setHoliday(res.holiday ?? null);
+    }
   }, []);
 
   // Keep the green "working" dots fresh, including punches from other devices.
@@ -168,6 +176,7 @@ export function KioskApp({
         </div>
         <Clock />
       </header>
+      <HolidayBanner holiday={holiday} className="mb-4" />
 
       {workers.length === 0 ? (
         <p className="text-muted-foreground m-auto text-center text-lg">No employees yet. The owner adds them.</p>

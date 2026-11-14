@@ -13,14 +13,15 @@ import type { Worker } from "@/types/database";
 
 export const metadata = { title: "Employees" };
 
-function payLine(w: Worker) {
+function payLine(w: Worker, currency: string) {
+  const money = (n: number) => formatMoney(n, currency);
   const base =
     w.wage_type === "daily"
-      ? `${formatMoney(w.daily_rate)}/day`
+      ? `${money(w.daily_rate)}/day`
       : w.wage_type === "hourly"
-        ? `${formatMoney(w.hourly_rate)}/hour`
-        : `${formatMoney(w.monthly_salary)}/month`;
-  const ot = Number(w.ot_rate_per_hour) > 0 ? ` · OT ${formatMoney(w.ot_rate_per_hour)}/h` : "";
+        ? `${money(w.hourly_rate)}/hour`
+        : `${money(w.monthly_salary)}/month`;
+  const ot = Number(w.ot_rate_per_hour) > 0 ? ` · OT ${money(w.ot_rate_per_hour)}/h` : "";
   return `${base}${ot}`;
 }
 
@@ -55,7 +56,13 @@ export default async function WorkersPage() {
 
       <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
         {active.map((w) => (
-          <WorkerCard key={w.id} worker={w} ownerId={settings.owner_id} businessTiming={businessTiming} />
+          <WorkerCard
+            key={w.id}
+            worker={w}
+            ownerId={settings.owner_id}
+            businessTiming={businessTiming}
+            currency={settings.currency}
+          />
         ))}
       </ul>
 
@@ -66,7 +73,13 @@ export default async function WorkersPage() {
           </summary>
           <ul className="mt-2 grid grid-cols-1 gap-2 opacity-70 md:grid-cols-2">
             {inactive.map((w) => (
-              <WorkerCard key={w.id} worker={w} ownerId={settings.owner_id} businessTiming={businessTiming} />
+              <WorkerCard
+                key={w.id}
+                worker={w}
+                ownerId={settings.owner_id}
+                businessTiming={businessTiming}
+                currency={settings.currency}
+              />
             ))}
           </ul>
         </details>
@@ -79,10 +92,12 @@ function WorkerCard({
   worker,
   ownerId,
   businessTiming,
+  currency,
 }: {
   worker: Worker;
   ownerId: string;
   businessTiming: string | null;
+  currency: string;
 }) {
   const ownTiming = timingLabel(worker);
   return (
@@ -95,7 +110,7 @@ function WorkerCard({
             {worker.wage_type}
           </Badge>
         </div>
-        <div className="text-muted-foreground truncate text-sm">{payLine(worker)}</div>
+        <div className="text-muted-foreground truncate text-sm">{payLine(worker, currency)}</div>
         {ownTiming && (
           <div className="text-muted-foreground truncate text-xs" data-testid="own-timing">
             Own timing {ownTiming}

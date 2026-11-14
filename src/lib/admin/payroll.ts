@@ -18,6 +18,8 @@ const NUMERIC_KEYS = [
   "gross_pay",
   "advances_total",
   "net_payable",
+  "paid_holidays",
+  "holiday_pay",
 ] as const satisfies (keyof PayrollRow)[];
 
 /** payroll_report() rows, with Postgres numerics coerced to numbers. */
@@ -36,11 +38,12 @@ export function payrollTotals(rows: PayrollRow[]) {
   return rows.reduce(
     (t, r) => ({
       base: t.base + r.base_pay,
+      holiday: t.holiday + r.holiday_pay,
       ot: t.ot + r.ot_pay,
       salary: t.salary + r.gross_pay,
       openPunches: t.openPunches + r.open_punches,
     }),
-    { base: 0, ot: 0, salary: 0, openPunches: 0 },
+    { base: 0, holiday: 0, ot: 0, salary: 0, openPunches: 0 },
   );
 }
 

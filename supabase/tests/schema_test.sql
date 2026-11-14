@@ -400,4 +400,75 @@ reset role;
 select pg_temp.check(not exists (select 1 from pg_proc where proname in ('kiosk_punch', 'worker_punch', 'do_punch') and pronargs < 5),
                      'punch functions without selfie dropped');
 
+-- ---- Holidays (08_holidays.sql) ---------------------------------------------------
+-- October 2026: Sundays 4, 11, 18, 25, so 27 working days.
+reset role;
+update workers set created_at = '2026-09-01 10:00+05:30'
+ where id in ('11111111-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000005',
+              '11111111-0000-0000-0000-000000000006', '11111111-0000-0000-0000-000000000007');
+update workers set created_at = '2026-10-10 10:00+05:30' where id = '11111111-0000-0000-0000-000000000008';
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+insert into holidays (date, name, paid) values
+  ('2026-10-02', 'Gandhi Jayanti', true),
+  ('2026-10-20', 'Dussehra', false),
+  ('2026-10-25', 'On a Sunday', true);
+do $$ begin
+  insert into holidays (date, name) values ('2026-10-03', '   ');
+  raise exception 'FAILED: blank holiday name accepted';
+exception when check_violation then raise notice 'ok - holiday needs a name';
+end $$;
+-- Anil (daily 900) also punched on the holiday; that punch is not paid on top.
+insert into attendance_logs (worker_id, clock_in, clock_out) values
+  ('11111111-0000-0000-0000-000000000005', '2026-10-02 10:30+05:30', '2026-10-02 19:30+05:30'),
+  ('11111111-0000-0000-0000-000000000005', '2026-10-05 10:30+05:30', '2026-10-05 19:30+05:30');
+-- Oct 1 none (absent), 2 paid holiday, 3 none (absent), 4 Sunday, 5 present.
+select pg_temp.check((select base_pay = 900 and holiday_pay = 900 and gross_pay = 1800 and paid_holidays = 1
+                        and days_present = 1 and absent_days = 2
+                      from payroll_report('2026-10-01', '2026-10-05') where worker_name like 'Anil%'),
+                     'paid holiday adds a day; punch on it not paid twice; missing days are absent');
+select pg_temp.check((select holiday_pay = round(26000.0 / 27, 2) and paid_holidays = 1 and absent_days = 25
+                        and gross_pay = round(26000.0 / 27, 2)
+                      from payroll_report('2026-10-01', '2026-10-31') where worker_name like 'Kavita%'),
+                     'monthly: paid holiday is a day of salary; unpaid and Sunday holidays add nothing, never absent');
+select pg_temp.check((select holiday_pay = 400 from payroll_report('2026-10-01', '2026-10-31') where worker_name like 'Priya%'),
+                     'part timer gets their daily rate');
+select pg_temp.check((select holiday_pay = 900 from payroll_report('2026-10-01', '2026-10-31') where worker_name like 'Suresh%'),
+                     'hourly: one 9h shift of hours');
+select pg_temp.check((select paid_holidays = 0 and holiday_pay = 0
+                      from payroll_report('2026-10-01', '2026-10-31') where worker_name like 'Mohan%'),
+                     'no holiday pay before the employee joined');
+update workers set is_active = false where id = '11111111-0000-0000-0000-000000000006';
+select pg_temp.check(not exists (select 1 from payroll_report('2026-10-01', '2026-10-31') where worker_name like 'Priya%'),
+                     'inactive employee with nothing after the holiday gets no holiday pay');
+update workers set is_active = true where id = '11111111-0000-0000-0000-000000000006';
+update holidays set paid = false where date = '2026-10-02';
+select pg_temp.check((select holiday_pay = 0 and gross_pay = 900 and absent_days = 2
+                      from payroll_report('2026-10-01', '2026-10-05') where worker_name like 'Anil%'),
+                     'unpaid holiday: no pay, not absent');
+update holidays set paid = true where date = '2026-10-02';
+-- A paid holiday still to come is not paid yet.
+insert into holidays (date, name)
+  select d, 'Coming up' from (select (now() at time zone 'Asia/Kolkata')::date + 1 as d) t;
+select pg_temp.check((select holiday_pay = 0 from payroll_report((now() at time zone 'Asia/Kolkata')::date + 1,
+                                                                 (now() at time zone 'Asia/Kolkata')::date + 1)
+                      where worker_name like 'Anil%'),
+                     'future holiday not paid yet');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select pg_temp.check((select count(*) = 0 from holidays), 'B sees no holidays of A');
+select pg_temp.check((select count(*) = 0 from payroll_report('2026-10-01', '2026-10-31')), 'B payroll has none of A');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+insert into holidays (date, name, paid) select (now() at time zone 'Asia/Kolkata')::date, 'Diwali', true;
+reset role;
+set role anon;
+select pg_temp.check((kiosk_list_workers('SHOPA12345')->'holiday'->>'name') = 'Diwali', 'kiosk list shows today''s holiday');
+select pg_temp.check((kiosk_verify_pin('SHOPA12345', '11111111-0000-0000-0000-000000000005', '2468')->'holiday'->>'paid')::boolean,
+                     'worker summary shows today''s holiday');
+do $$ begin
+  perform 1 from holidays;
+  raise exception 'FAILED: anon read holidays';
+exception when insufficient_privilege then raise notice 'ok - anon cannot read holidays';
+end $$;
+reset role;
+
 \echo ALL TESTS PASSED

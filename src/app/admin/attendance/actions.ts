@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { isIsoDate } from "@/lib/admin/calendar";
+import { addDays, isIsoDate } from "@/lib/admin/calendar";
 import { requireOwner } from "@/lib/admin/data";
 import { zonedDate } from "@/lib/timing";
 import type { AttendanceStatus } from "@/types/database";
@@ -35,6 +35,11 @@ export async function saveDay(_prev: DayState, formData: FormData): Promise<DayS
 
   const { supabase, settings, today } = await requireOwner();
   if (date > today) return { error: "That date is in the future." };
+  // Without an out time the day stays "still in" and is left out of the salary. Fine for
+  // today or last night's shift, but an older day would never be closed by a punch.
+  if (inTime && !outTime && status === "auto" && date < addDays(today, -1)) {
+    return { error: "Enter the out time too." };
+  }
 
   let clockIn: string | null = null;
   let clockOut: string | null = null;

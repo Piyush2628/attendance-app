@@ -1,4 +1,5 @@
--- 08: Holidays (2026-11-14)
+-- 08: Holidays (2026-11-14). Safe to run again if a run stopped halfway.
+-- Needs 01 to 07 first (the "private" schema comes from 01_schema.sql).
 --   1. The owner keeps a list of holidays (date + name), each paid or unpaid.
 --   2. A holiday is never counted as absent.
 --   3. A paid holiday is paid as one day to every employee who was on the
@@ -14,7 +15,7 @@
 --   6. The punch screens learn today's holiday, to show a banner.
 
 -- 1. Holidays -----------------------------------------------------------------
-create table public.holidays (
+create table if not exists public.holidays (
   owner_id   uuid not null default auth.uid() references auth.users (id) on delete cascade,
   date       date not null,
   name       text not null check (length(trim(name)) between 1 and 60),
@@ -24,6 +25,7 @@ create table public.holidays (
 );
 
 alter table public.holidays enable row level security;
+drop policy if exists "owner manages own holidays" on public.holidays;
 create policy "owner manages own holidays" on public.holidays
   for all to authenticated
   using (owner_id = (select auth.uid()))
@@ -73,7 +75,7 @@ grant execute on function private.working_days_in_month(date, smallint[]),
 
 -- 3. Payroll --------------------------------------------------------------------
 -- New columns, so the old function has to go first.
-drop function public.payroll_report(date, date);
+drop function if exists public.payroll_report(date, date);
 
 create function public.payroll_report(p_start date, p_end date)
 returns table (

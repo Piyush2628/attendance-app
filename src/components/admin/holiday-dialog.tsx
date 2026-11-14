@@ -54,7 +54,7 @@ export function HolidayDialog(props: Props) {
         <DialogHeader>
           <DialogTitle>{holiday ? `Change ${holiday.name}` : "Add a holiday"}</DialogTitle>
           <DialogDescription>
-            Nobody is marked absent on a holiday. A paid holiday is paid as one day to every employee.
+            Holidays are paid. Nobody is marked absent on one.
           </DialogDescription>
         </DialogHeader>
         {open && <HolidayForm {...props} onDone={() => setOpen(false)} />}
@@ -65,7 +65,6 @@ export function HolidayDialog(props: Props) {
 
 function HolidayForm({ holiday, date, onDone }: Props & { onDone: () => void }) {
   const [state, action, pending] = useFormAction<HolidayState>(saveHoliday, {});
-  const [paid, setPaid] = useState(holiday?.paid ?? true);
   const [deleting, startDelete] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -77,7 +76,6 @@ function HolidayForm({ holiday, date, onDone }: Props & { onDone: () => void }) 
   return (
     <form onSubmit={action} className="grid gap-4" data-testid="holiday-form">
       {holiday && <input type="hidden" name="original_date" value={holiday.date} />}
-      <input type="hidden" name="paid" value={String(paid)} />
 
       <div className="grid gap-1.5">
         <Label htmlFor="holiday-date">Date</Label>
@@ -103,34 +101,10 @@ function HolidayForm({ holiday, date, onDone }: Props & { onDone: () => void }) 
         </datalist>
       </div>
 
-      <div className="grid gap-2">
-        <Label>Pay</Label>
-        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Pay">
-          {[
-            { value: true, label: "Paid", hint: "Everyone gets a day's pay" },
-            { value: false, label: "Unpaid", hint: "Day off, no pay" },
-          ].map((o) => (
-            <button
-              key={o.label}
-              type="button"
-              role="radio"
-              aria-checked={paid === o.value}
-              onClick={() => setPaid(o.value)}
-              className={cn(
-                "rounded-lg border p-2 text-left",
-                paid === o.value ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent",
-              )}
-            >
-              <div className="text-sm font-semibold">{o.label}</div>
-              <div className={cn("text-xs", paid === o.value ? "opacity-80" : "text-muted-foreground")}>{o.hint}</div>
-            </button>
-          ))}
-        </div>
-        <p className="text-muted-foreground text-xs">
-          Daily staff get their daily rate, monthly staff one day of salary, hourly staff one shift. Punches on a
-          holiday are kept but not paid on top. A holiday on an off day adds nothing.
-        </p>
-      </div>
+      <p className="text-muted-foreground bg-muted/60 rounded-lg p-3 text-xs">
+        Paid as one day to every employee: daily rate, one day of monthly salary, or one shift for hourly staff.
+        Nobody is marked absent. A holiday on an off day adds nothing.
+      </p>
 
       {(state.error || deleteError) && (
         <p role="alert" className="text-destructive text-sm">

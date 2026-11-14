@@ -37,9 +37,9 @@ export default async function AdminHome() {
           <span>
             <span className="font-semibold">Holiday: {holiday.name}</span>
             {" · "}
-            {holiday.paid && !offDay
-              ? "Everyone gets a day's pay. Nobody is marked absent; punches are kept but not paid on top."
-              : "Nobody is marked absent. Punches are kept but not paid."}
+            {offDay
+              ? "Nobody is marked absent."
+              : "Everyone gets a day's pay and nobody is marked absent."}
           </span>
         </Link>
       )}

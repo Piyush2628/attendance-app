@@ -251,7 +251,7 @@ export default async function SalarySlipPage({ params, searchParams }: PageProps
                         </td>
                         <td className="hidden sm:table-cell print:table-cell" />
                         <td className={cn("py-1 text-right font-medium", HOLIDAY_STYLE.text)}>
-                          {isOff(date) ? "Off day" : holiday?.paid ? "Holiday" : "Holiday (unpaid)"}
+                          {isOff(date) ? "Off day" : "Holiday"}
                         </td>
                         <td className="no-print" />
                       </tr>

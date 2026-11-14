@@ -259,7 +259,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/admin
                     <div className="mt-0.5 flex flex-wrap gap-1 empty:hidden">
                       <LateTag minutes={l.late_minutes} />
                       {(off || holiday) && l.status !== "absent" && dayState(l) !== "open" && (
-                        <span className="text-xs">{holiday?.paid && !off ? "Holiday pay instead" : "Not paid"}</span>
+                        <span className="text-xs">{holiday && !off ? "Holiday pay instead" : "Not paid"}</span>
                       )}
                     </div>
                   )}

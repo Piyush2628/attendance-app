@@ -9,14 +9,13 @@ import { NATIONAL_HOLIDAYS } from "@/lib/holidays";
 export type HolidayState = { ok?: boolean; error?: string; savedAt?: number };
 
 /**
- * Add a holiday, or change one (`original_date` is the date it had before).
+ * Add a holiday (always paid: the owner only marks paid holidays), or change one (`original_date` is the date it had before).
  * Saving re-reads every page, since attendance and payroll depend on holidays.
  */
 export async function saveHoliday(_prev: HolidayState, formData: FormData): Promise<HolidayState> {
   const original = String(formData.get("original_date") ?? "") || null;
   const date = String(formData.get("date") ?? "");
   const name = String(formData.get("name") ?? "").trim().replace(/\s+/g, " ");
-  const paid = formData.get("paid") !== "false";
 
   if (!isIsoDate(date)) return { error: "Choose a date." };
   if (original && !isIsoDate(original)) return { error: "Choose a date." };
@@ -25,8 +24,8 @@ export async function saveHoliday(_prev: HolidayState, formData: FormData): Prom
 
   const { supabase, settings } = await requireOwner();
   const { error } = original
-    ? await supabase.from("holidays").update({ date, name, paid }).eq("owner_id", settings.owner_id).eq("date", original)
-    : await supabase.from("holidays").insert({ owner_id: settings.owner_id, date, name, paid });
+    ? await supabase.from("holidays").update({ date, name, paid: true }).eq("owner_id", settings.owner_id).eq("date", original)
+    : await supabase.from("holidays").insert({ owner_id: settings.owner_id, date, name, paid: true });
   if (error) {
     return { error: error.code === "23505" ? "There is already a holiday on that date." : error.message };
   }

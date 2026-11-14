@@ -2,7 +2,6 @@ import Link from "next/link";
 import { CalendarHeart, ChevronLeft, ChevronRight, Flag } from "lucide-react";
 
 import { HolidayDialog, NationalHolidaysButton } from "@/components/admin/holiday-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { loadHolidays, requireOwner } from "@/lib/admin/data";
 import { dayCount, monthName, weekday } from "@/lib/admin/calendar";
@@ -21,7 +20,7 @@ export default async function HolidaysPage({ searchParams }: PageProps<"/admin/h
 
   const holidays = [...(await loadHolidays(supabase, `${year}-01-01`, `${year}-12-31`)).values()];
   const isOff = (d: string) => isOffDay(d, settings.off_days);
-  const paidDays = holidays.filter((h) => h.paid && !isOff(h.date)).length;
+  const paidDays = holidays.filter((h) => !isOff(h.date)).length;
   const next = holidays.find((h) => h.date >= today);
   const missingNational = NATIONAL_HOLIDAYS.filter((n) => !holidays.some((h) => h.date === `${year}-${n.monthDay}`));
   const indian = settings.currency === "INR" || settings.timezone === "Asia/Kolkata";
@@ -113,11 +112,10 @@ export default async function HolidaysPage({ searchParams }: PageProps<"/admin/h
                       <div className="min-w-0 flex-1">
                         <div className={cn("truncate font-semibold", past && "text-muted-foreground")}>{h.name}</div>
                         <div className="text-muted-foreground text-xs">
-                          {off ? "On an off day, so no extra pay" : h.paid ? "Paid to everyone" : "Closed, not paid"}
+                          {off ? "On an off day, so no extra pay" : "Paid to everyone"}
                           {h.date === today && " · Today"}
                         </div>
                       </div>
-                      <Badge variant={h.paid && !off ? "present" : "outline"}>{h.paid ? "Paid" : "Unpaid"}</Badge>
                       <HolidayDialog holiday={h} compact />
                     </li>
                   );
@@ -129,7 +127,7 @@ export default async function HolidaysPage({ searchParams }: PageProps<"/admin/h
       )}
 
       <p className="text-muted-foreground text-xs">
-        On a holiday nobody is marked absent. A paid holiday is paid as one day to everyone who was working for you
+        Every holiday is paid and nobody is marked absent on it. It is paid as one day to everyone who was working for you
         then: the daily rate, a day of the monthly salary, or one shift for hourly staff. It shows on the salary slip
         once the day has passed.
       </p>

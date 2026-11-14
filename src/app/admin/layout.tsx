@@ -11,7 +11,10 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const { settings } = await requireOwner();
 
   return (
-    <div className="flex flex-1 flex-col pb-20 md:pb-0">
+    // The phone tab bar is the last item of this full-height column and sticks to the
+    // bottom (not position: fixed). iOS home-screen apps drew the fixed bar too high
+    // while a short page or the loading skeleton was showing.
+    <div className="flex flex-1 flex-col">
       <header className="no-print border-b px-4 py-2">
         <nav className="mx-auto flex max-w-5xl items-center gap-6">
           <span className="min-w-0 truncate font-bold">{settings.business_name}</span>

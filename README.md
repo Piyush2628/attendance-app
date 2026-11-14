@@ -112,14 +112,14 @@ Changing a timing applies to punches from then on; past days keep their status.
 ## Holidays
 
 Open **Holidays** (calendar icon in the header, or Settings → Holidays). Add a date and a name
-(Diwali, Holi, …) and choose **Paid** or **Unpaid**. With an Indian business, one tap adds
-Republic Day, Independence Day and Gandhi Jayanti for the year.
+(Diwali, Holi, …). With an Indian business, one tap adds Republic Day, Independence Day and Gandhi
+Jayanti for the year.
 
-- Nobody is marked absent on a holiday.
-- A **paid** holiday is paid as one day to every employee who was working for you then: the daily
+- Every holiday is paid, and nobody is marked absent on one. A day with no punch that isn't a
+  holiday or an off day is absent and not paid.
+- A holiday is paid as one day to every employee who was working for you then: the daily
   rate, one day of the monthly salary (salary ÷ the month's working days), or one shift of hours for
   hourly staff. It is added once the day has passed, as "Paid holidays" on the payroll and slip.
-- An **unpaid** holiday is just a day off: not absent, not paid.
 - A holiday on an off day (e.g. a Sunday) adds nothing; it was a day off anyway.
 - Punches on a holiday are kept and shown, but like off days they are not paid on top.
 - The Today page, the Attendance pages (violet **H** in the calendar) and the punch screens show

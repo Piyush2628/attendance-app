@@ -197,7 +197,7 @@ function DayView({
           <CalendarHeart className="size-4 shrink-0" />
           <span>
             <span className="font-semibold">{holiday.name}</span> ·{" "}
-            {holiday.paid && !off ? "paid holiday, nobody is absent" : "holiday, nobody is absent"}
+            {off ? "holiday, nobody is absent" : "paid holiday, nobody is absent"}
           </span>
         </Link>
       )}

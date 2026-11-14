@@ -5,6 +5,7 @@ import { Pencil, UserPlus } from "lucide-react";
 
 import { saveWorker, type SaveWorkerState } from "@/app/admin/employees/actions";
 import { PhotoPicker } from "@/components/admin/photo-picker";
+import { WorkerActiveToggle } from "@/components/admin/worker-active-toggle";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,8 +42,8 @@ export function WorkerFormDialog(props: FormProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {worker ? (
-          <Button variant="outline" size="sm">
-            <Pencil /> Edit
+          <Button variant="outline" size="icon" aria-label={`Edit ${worker.name}`}>
+            <Pencil />
           </Button>
         ) : (
           <Button size="lg">
@@ -179,6 +180,11 @@ function WorkerForm({ ownerId, worker, businessTiming, onSaved }: FormProps & { 
       <Button type="submit" size="lg" disabled={pending}>
         {pending ? "Saving…" : worker ? "Save changes" : "Add employee"}
       </Button>
+      {worker?.is_active && (
+        <div className="flex justify-center border-t pt-3">
+          <WorkerActiveToggle workerId={worker.id} active name={worker.name} />
+        </div>
+      )}
     </form>
   );
 }

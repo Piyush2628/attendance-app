@@ -95,6 +95,23 @@
   }
 }
 
+/* iOS Safari gives date/time inputs a fixed native width, so in a two-column row the
+   second box spills out of its card. Drop the native look so they fill their column. */
+input[type="date"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.75rem;
+  line-height: 1.5;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 /* Installed app: iOS draws the status bar over the page (black-translucent),
    so keep content clear of the notch / clock. */
 @media (display-mode: standalone), (display-mode: fullscreen) {

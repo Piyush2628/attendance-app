@@ -44,11 +44,6 @@ export const HOLIDAY_SUGGESTIONS = [
   "New Year's Day",
 ];
 
-/** "Paid holiday" / "Unpaid holiday". */
-export function holidayKind(h: Pick<HolidayInfo, "paid">) {
-  return h.paid ? "Paid holiday" : "Unpaid holiday";
-}
-
 /** Colours for a holiday, alongside the Present / Half day / Absent ones in day-state.ts. */
 export const HOLIDAY_STYLE = {
   /** Solid chip or calendar square. */

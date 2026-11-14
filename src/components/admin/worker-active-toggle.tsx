@@ -12,6 +12,7 @@ export function WorkerActiveToggle({ workerId, active, name }: { workerId: strin
     <Button
       variant="ghost"
       size="sm"
+      className={active ? "text-muted-foreground" : undefined}
       disabled={pending}
       onClick={() => {
         if (active && !confirm(`Remove ${name} from the kiosk and today's list? Past attendance is kept.`)) return;
